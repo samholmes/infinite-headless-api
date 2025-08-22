@@ -14,6 +14,12 @@ This repository is dedicated to:
 - Providing clear examples and usage guidelines
 - Maintaining up-to-date technical documentation
 
+## Documentation Files
+
+This repository contains the following key documentation files:
+
+- `infinite-headless-api.md` - Complete API reference and implementation guide for the Infinite Headless SDK
+
 ## Getting Started
 
 To get started with the Infinite Headless SDK:
