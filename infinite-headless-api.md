@@ -243,6 +243,137 @@ POST /auth/wallet/logout
 
 ---
 
+## Supported Countries & Currencies
+
+### Get Supported Countries
+
+Retrieve the list of countries supported for on-ramp and off-ramp operations.
+
+```http
+GET /v1/headless/countries
+```
+
+#### Example Response
+
+```json
+{
+  "countries": [
+    {
+      "code": "US",
+      "name": "United States",
+      "isAllowed": true,
+      "supportedFiatCurrencies": ["USD"],
+      "supportedPaymentMethods": {
+        "onRamp": ["ach", "wire"],
+        "offRamp": ["ach", "wire"]
+      }
+    },
+    {
+      "code": "EU",
+      "name": "European Union",
+      "isAllowed": true,
+      "supportedFiatCurrencies": ["EUR"],
+      "supportedPaymentMethods": {
+        "onRamp": ["sepa"],
+        "offRamp": ["sepa"]
+      },
+      "memberStates": [
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+        "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+        "PL", "PT", "RO", "SK", "SI", "ES", "SE"
+      ]
+    },
+    {
+      "code": "MX",
+      "name": "Mexico",
+      "isAllowed": true,
+      "supportedFiatCurrencies": ["MXN"],
+      "supportedPaymentMethods": {
+        "onRamp": ["spei"],
+        "offRamp": ["spei"]
+      }
+    }
+  ]
+}
+```
+
+### Get Supported Currencies
+
+Retrieve all supported cryptocurrencies and fiat currencies with their networks and limits.
+
+```http
+GET /v1/headless/currencies
+```
+
+#### Example Response
+
+```json
+{
+  "currencies": [
+    {
+      "code": "USDC",
+      "name": "USD Coin",
+      "type": "crypto",
+      "supportedNetworks": [
+        {
+          "network": "ethereum",
+          "networkCode": "ETH",
+          "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "confirmationsRequired": 12
+        },
+        {
+          "network": "polygon",
+          "networkCode": "POLYGON",
+          "contractAddress": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+          "confirmationsRequired": 30
+        },
+        {
+          "network": "solana",
+          "networkCode": "SOL",
+          "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "confirmationsRequired": 1
+        }
+      ],
+      "supportsOnRamp": true,
+      "supportsOffRamp": true,
+      "onRampCountries": ["US", "EU", "MX"],
+      "offRampCountries": ["US", "EU", "MX"],
+      "minAmount": "50",
+      "maxAmount": "50000",
+      "precision": 6
+    },
+    {
+      "code": "USD",
+      "name": "US Dollar",
+      "type": "fiat",
+      "supportedPaymentRails": ["ach", "wire"],
+      "countryCode": "US",
+      "precision": 2,
+      "minAmount": "50",
+      "maxAmount": "50000"
+    }
+    // ... more currencies
+  ]
+}
+```
+
+**Key Features:**
+
+- **Authentication required** - Must be authenticated with a wallet JWT token
+- **No onboarding required** - Can be accessed before completing customer KYC
+- **Real-time limits** - Min/max amounts reflect current operational limits
+- **Network details** - Includes contract addresses and confirmation requirements
+- **Payment rails** - Shows available payment methods per country
+
+**Limits:**
+
+- **ACH**: $50 - $50,000 per transaction
+- **Wire**: $500 - $50,000 per transaction (note higher minimum)
+- **SEPA**: €50 - €50,000 per transaction
+- **SPEI**: MXN 1,000 - MXN 1,000,000 per transaction
+
+---
+
 ## Customer Onboarding
 
 ### Create Customer Profile
@@ -386,6 +517,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 **KYC Status Values (from Bridge):**
 
+<<<<<<< Updated upstream
 - `not_started` - Customer hasn't begun KYC process
 - `incomplete` - KYC process started but not finished
 - `awaiting_ubo` - Waiting for Ultimate Beneficial Owner information (business only)
@@ -393,6 +525,15 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 - `approved` - KYC completed successfully, customer can transact
 - `rejected` - KYC failed, customer cannot use the platform
 - `paused` - KYC process temporarily paused
+=======
+- `not_started` - KYC link created but not accessed
+- `incomplete` - User started but didn't complete KYC
+- `awaiting_ubo` - Waiting for Ultimate Beneficial Owner information (business only)
+- `under_review` - Documents submitted and under review
+- `approved` - KYC completed successfully, customer can transact
+- `rejected` - KYC failed, customer cannot proceed
+- `paused` - KYC temporarily paused
+>>>>>>> Stashed changes
 - `offboarded` - Customer has been offboarded
 
 ---
