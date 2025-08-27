@@ -62,6 +62,96 @@ The authentication process consists of three steps:
 
 ---
 
+## Quotes API
+
+### Get Real-time Quote
+
+Get a real-time quote for on-ramp, off-ramp, or bank-to-bank conversions.
+
+**Endpoint:** `POST /v2/quotes`
+
+**Authentication:** Requires wallet authentication
+
+#### Request Body
+
+- `flow`: Flow type (ONRAMP, OFFRAMP, or BANK_TO_BANK)
+- `source.amount` OR `target.amount`: Specify either source or target amount (not both)
+- `network`: Required for cryptocurrency assets
+
+```json
+{
+  "flow": "ONRAMP|OFFRAMP|BANK_TO_BANK",
+  "source": {
+    "asset": "USD",
+    "amount": 100.00,
+    "network": "ethereum"
+  },
+  "target": {
+    "asset": "USDC",
+    "amount": 95.00, 
+    "network": "ethereum"
+  }
+}
+```
+
+#### Response
+
+```json
+{
+  "quoteId": "quote_12345",
+  "flow": "ONRAMP",
+  "source": {
+    "asset": "USD",
+    "amount": 100.00
+  },
+  "target": {
+    "asset": "USDC", 
+    "amount": 95.00,
+    "network": "ethereum"
+  },
+  "fee": 5.00,
+  "rate": 0.95,
+  "infiniteFee": 2.50,
+  "edgeFee": 1.25,
+  "totalReceived": 91.25,
+  "expiresAt": "2025-08-26T04:27:46.824560+00:00"
+}
+```
+
+#### Flow Types
+
+- **ONRAMP**: Convert fiat currency to cryptocurrency
+- **OFFRAMP**: Convert cryptocurrency to fiat currency  
+- **BANK_TO_BANK**: Convert between different fiat currencies
+
+#### Validation Rules
+
+- Must specify either `source.amount` OR `target.amount` (not both)
+- Minimum amount for USD: $50
+- Valid flow types: ONRAMP, OFFRAMP, BANK_TO_BANK
+- Network field required for cryptocurrency assets
+
+#### Example Usage
+
+```javascript
+// Get quote for converting $100 USD to USDC
+const quote = await fetch('/v2/quotes', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${walletToken}`,
+    'X-Organization-ID': organizationId,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    flow: 'ONRAMP',
+    source: { asset: 'USD', amount: 100.00 },
+    target: { asset: 'USDC', network: 'ethereum' }
+  })
+});
+```
+
+---
+
 ## API Reference
 
 ### Request Authentication Challenge
