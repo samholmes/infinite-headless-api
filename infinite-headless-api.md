@@ -445,6 +445,7 @@ POST /v1/headless/customers
 - Bridge customer created automatically via KYC link API
 - Real-time KYC status from Bridge
 - Smart handling of existing customers (won't create duplicate KYC if already approved)
+- TOS links available immediately after creation (can be accessed in parallel with KYC)
 
 ---
 
@@ -530,11 +531,11 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 ### Terms of Service (TOS)
 
-After KYC approval, customers must accept Bridge's Terms of Service to complete onboarding.
+Customers can access and accept Bridge's Terms of Service immediately after account creation, even before KYC approval.
 
 #### Get TOS Link
 
-Retrieve the Terms of Service acceptance link and status for an approved customer.
+Retrieve the Terms of Service acceptance link and status for a customer.
 
 ```http
 GET /v1/headless/customers/{customerId}/tos
@@ -586,19 +587,20 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 **TOS Flow:**
 
-1. Customer completes KYC and is approved
-2. Call GET `/v1/headless/customers/{customerId}/tos` to get TOS link
+1. Customer is created via headless SDK
+2. Call GET `/v1/headless/customers/{customerId}/tos` to get TOS link (available immediately)
 3. If status is "pending", redirect customer to the `tosUrl`
-4. Customer accepts TOS on Bridge's platform
+4. Customer accepts TOS on Bridge's platform (can be done in parallel with KYC)
 5. Bridge sends webhook to update TOS status
-6. Customer can now perform transactions
+6. Once both KYC and TOS are complete, customer can perform transactions
 
 **Key Features:**
-- Only available after KYC approval (returns 400 if KYC not approved)
+- Available immediately after customer creation (no need to wait for KYC approval)
 - Returns Infinite-owned URL that redirects to Bridge
 - Session-based with 24-hour expiration
 - Automatic status tracking via Bridge webhooks
 - No need to store TOS acceptance locally
+- Can be completed in parallel with KYC for better user experience
 
 **TOS Status Values:**
 - `pending` - TOS needs to be accepted
@@ -653,7 +655,128 @@ POST /accounts
 
 ## Quotes
 
-### Create Quote
+### Create Quote (Headless)
+
+Get real-time quotes for on-ramp (Bank → Crypto) or off-ramp (Crypto → Bank) conversions. This headless endpoint supports BTC, USDC, USDT, and ETH with automatic rate calculation.
+
+```http
+POST /v1/headless/quotes
+```
+
+#### Request Parameters
+
+- **flow**: `string` (required) - Either "ONRAMP" or "OFFRAMP"
+- **source**: `object` (required)
+  - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
+  - `amount`: `decimal` (optional) - Amount to convert
+  - `network`: `string` (optional) - Blockchain network for crypto assets
+- **target**: `object` (required)
+  - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
+  - `amount`: `decimal` (optional) - Amount to receive (if source amount not provided)
+  - `network`: `string` (optional) - Blockchain network for crypto assets
+
+> **Note:** You must provide either `source.amount` or `target.amount`, but not both.
+
+#### Example Request (On-Ramp: USD → USDC)
+
+```json
+{
+  "flow": "ONRAMP",
+  "source": { 
+    "asset": "USD", 
+    "amount": 1000.0 
+  },
+  "target": { 
+    "asset": "USDC", 
+    "network": "ethereum" 
+  }
+}
+```
+
+#### Example Response
+
+```json
+{
+  "quoteId": "quote_hls_xyz123abc456",
+  "flow": "ONRAMP",
+  "source": { 
+    "asset": "USD", 
+    "amount": 1000.0 
+  },
+  "target": { 
+    "asset": "USDC", 
+    "network": "ethereum", 
+    "amount": 990.0 
+  },
+  "infiniteFee": 5.0,
+  "edgeFee": 5.0
+}
+```
+
+#### Example Request (Off-Ramp: BTC → USD)
+
+```json
+{
+  "flow": "OFFRAMP",
+  "source": { 
+    "asset": "BTC", 
+    "amount": 0.5,
+    "network": "bitcoin" 
+  },
+  "target": { 
+    "asset": "USD" 
+  }
+}
+```
+
+#### Example Response
+
+```json
+{
+  "quoteId": "quote_hls_def789ghi012",
+  "flow": "OFFRAMP",
+  "source": { 
+    "asset": "BTC", 
+    "amount": 0.5,
+    "network": "bitcoin" 
+  },
+  "target": { 
+    "asset": "USD", 
+    "amount": 50250.75 
+  },
+  "infiniteFee": 125.25,
+  "edgeFee": 125.25
+}
+```
+
+### Supported Assets
+
+**Cryptocurrencies:**
+- BTC (Bitcoin)
+- ETH (Ethereum)
+- USDC (USD Coin)
+- USDT (Tether)
+
+**Fiat Currencies:**
+- USD (US Dollar)
+
+**Networks:**
+- `bitcoin` - Bitcoin network
+- `ethereum` - Ethereum mainnet
+- `polygon` - Polygon network
+- `solana` - Solana network
+
+### Fee Structure
+
+- **infiniteFee**: Fee charged by Infinite (0.5% of transaction)
+- **edgeFee**: Additional fee charged by Edge (0.5% of transaction)
+- **Total Fee**: 1% of transaction amount
+
+> **Rate Source:** Exchange rates are fetched in real-time from DeFiLlama price API.
+
+---
+
+### Create Quote (Standard)
 
 Get real-time quotes for on-ramp (Bank → Crypto) or off-ramp (Crypto → Bank) conversions.
 
