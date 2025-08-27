@@ -62,96 +62,6 @@ The authentication process consists of three steps:
 
 ---
 
-## Quotes API
-
-### Get Real-time Quote
-
-Get a real-time quote for on-ramp, off-ramp, or bank-to-bank conversions.
-
-**Endpoint:** `POST /v2/quotes`
-
-**Authentication:** Requires wallet authentication
-
-#### Request Body
-
-- `flow`: Flow type (ONRAMP, OFFRAMP, or BANK_TO_BANK)
-- `source.amount` OR `target.amount`: Specify either source or target amount (not both)
-- `network`: Required for cryptocurrency assets
-
-```json
-{
-  "flow": "ONRAMP|OFFRAMP|BANK_TO_BANK",
-  "source": {
-    "asset": "USD",
-    "amount": 100.00,
-    "network": "ethereum"
-  },
-  "target": {
-    "asset": "USDC",
-    "amount": 95.00, 
-    "network": "ethereum"
-  }
-}
-```
-
-#### Response
-
-```json
-{
-  "quoteId": "quote_12345",
-  "flow": "ONRAMP",
-  "source": {
-    "asset": "USD",
-    "amount": 100.00
-  },
-  "target": {
-    "asset": "USDC", 
-    "amount": 95.00,
-    "network": "ethereum"
-  },
-  "fee": 5.00,
-  "rate": 0.95,
-  "infiniteFee": 2.50,
-  "edgeFee": 1.25,
-  "totalReceived": 91.25,
-  "expiresAt": "2025-08-26T04:27:46.824560+00:00"
-}
-```
-
-#### Flow Types
-
-- **ONRAMP**: Convert fiat currency to cryptocurrency
-- **OFFRAMP**: Convert cryptocurrency to fiat currency  
-- **BANK_TO_BANK**: Convert between different fiat currencies
-
-#### Validation Rules
-
-- Must specify either `source.amount` OR `target.amount` (not both)
-- Minimum amount for USD: $50
-- Valid flow types: ONRAMP, OFFRAMP, BANK_TO_BANK
-- Network field required for cryptocurrency assets
-
-#### Example Usage
-
-```javascript
-// Get quote for converting $100 USD to USDC
-const quote = await fetch('/v2/quotes', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${walletToken}`,
-    'X-Organization-ID': organizationId,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    flow: 'ONRAMP',
-    source: { asset: 'USD', amount: 100.00 },
-    target: { asset: 'USDC', network: 'ethereum' }
-  })
-});
-```
-
----
-
 ## API Reference
 
 ### Request Authentication Challenge
@@ -529,26 +439,36 @@ POST /accounts
 
 ### Create Quote
 
-Get real-time quotes for on-ramp (Bank → Crypto) or off-ramp (Crypto → Bank) conversions.
+Get real-time quotes for on-ramp (USD → Crypto) or off-ramp (Crypto → USD) conversions. This endpoint is **public** and doesn't require authentication.
 
-- **flow**: `string` (required)
+**Supported Assets:**
+- **Fiat**: USD
+- **Crypto**: BTC, USDC, USDT, ETH (on Ethereum network)
+
+**Fee Structure:**
+- **1% base fee** applied to all transactions
+- No hidden spreads or additional fees
+
+**Parameters:**
+- **flow**: `string` (required) - Must be "ONRAMP" or "OFFRAMP"
 - **source**: `object` (required)
-  - `asset`: Asset code (e.g., "USD", "USDC")
-  - `amount`: Amount to convert
-  - `network`: (Optional) Blockchain network for crypto assets
+  - `asset`: Asset code from supported list
+  - `amount`: Amount to convert (optional - specify either source or target amount)
+  - `network`: (Optional) "ethereum" for crypto assets
 - **target**: `object` (required)
-  - `asset`: Asset code (e.g., "USD", "USDC")
-  - `network`: (Optional) Blockchain network for crypto assets
+  - `asset`: Asset code from supported list
+  - `amount`: Target amount (optional - specify either source or target amount)
+  - `network`: (Optional) "ethereum" for crypto assets
 
 ```http
-POST /v2/quotes
+POST /v1/headless/quotes
 ```
 
 #### On-Ramp Quote Example (USD → USDC)
 ```json
 {
   "flow": "ONRAMP",
-  "source": { "asset": "USD", "amount": 1000.0 },
+  "source": { "asset": "USD", "amount": 100.0 },
   "target": { "asset": "USDC", "network": "ethereum" }
 }
 ```
@@ -559,11 +479,14 @@ POST /v2/quotes
 {
   "quoteId": "quote_xyz123abc456def789",
   "flow": "ONRAMP",
-  "source": { "asset": "USD", "amount": 1000.0 },
-  "target": { "asset": "USDC", "network": "ethereum", "amount": 995.0 },
-  "fee": 5.0,
-  "rate": 0.995,
-  "expiresAt": "2024-06-30T16:15:00Z"
+  "source": { "asset": "USD", "amount": 101.0 },
+  "target": { "asset": "USDC", "network": "ethereum", "amount": 100.0 },
+  "fee": 1.0,
+  "rate": 1.0,
+  "infiniteFee": 1.0,
+  "edgeFee": null,
+  "totalReceived": null,
+  "expiresAt": "2025-08-27T16:15:00Z"
 }
 ```
 
@@ -571,7 +494,7 @@ POST /v2/quotes
 ```json
 {
   "flow": "OFFRAMP",
-  "source": { "asset": "USDC", "network": "ethereum", "amount": 1000.0 },
+  "source": { "asset": "USDC", "network": "ethereum", "amount": 100.0 },
   "target": { "asset": "USD" }
 }
 ```
@@ -582,14 +505,23 @@ POST /v2/quotes
 {
   "quoteId": "quote_abc456def789xyz123",
   "flow": "OFFRAMP",
-  "source": { "asset": "USDC", "network": "ethereum", "amount": 1000.0 },
-  "target": { "asset": "USD", "amount": 985.0 },
-  "infiniteFee": 10.0,
-  "edgeFee": 5.0,
-  "totalReceived": 985.0,
-  "expiresAt": "2024-06-30T16:20:00Z"
+  "source": { "asset": "USDC", "network": "ethereum", "amount": 100.0 },
+  "target": { "asset": "USD", "amount": 99.0 },
+  "fee": 1.0,
+  "rate": 1.0,
+  "infiniteFee": 1.0,
+  "edgeFee": null,
+  "totalReceived": 99.0,
+  "expiresAt": "2025-08-27T16:20:00Z"
 }
 ```
+
+**Response Fields:**
+- `fee`: Total fee amount (always 1% of source amount)
+- `infiniteFee`: Base fee amount (same as `fee`)
+- `edgeFee`: Always `null` (no spread fees)
+- `totalReceived`: Final amount user receives (OFFRAMP only)
+- `rate`: Exchange rate between assets
 
 > **Important:** Quotes expire after the time specified in `expiresAt`. Always execute transfers before the quote expires to guarantee the quoted rate.
 
