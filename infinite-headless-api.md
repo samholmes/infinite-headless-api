@@ -517,15 +517,6 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 **KYC Status Values (from Bridge):**
 
-<<<<<<< Updated upstream
-- `not_started` - Customer hasn't begun KYC process
-- `incomplete` - KYC process started but not finished
-- `awaiting_ubo` - Waiting for Ultimate Beneficial Owner information (business only)
-- `under_review` - Documents submitted and under review
-- `approved` - KYC completed successfully, customer can transact
-- `rejected` - KYC failed, customer cannot use the platform
-- `paused` - KYC process temporarily paused
-=======
 - `not_started` - KYC link created but not accessed
 - `incomplete` - User started but didn't complete KYC
 - `awaiting_ubo` - Waiting for Ultimate Beneficial Owner information (business only)
@@ -533,8 +524,86 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 - `approved` - KYC completed successfully, customer can transact
 - `rejected` - KYC failed, customer cannot proceed
 - `paused` - KYC temporarily paused
->>>>>>> Stashed changes
 - `offboarded` - Customer has been offboarded
+
+---
+
+### Terms of Service (TOS)
+
+After KYC approval, customers must accept Bridge's Terms of Service to complete onboarding.
+
+#### Get TOS Link
+
+Retrieve the Terms of Service acceptance link and status for an approved customer.
+
+```http
+GET /v1/headless/customers/{customerId}/tos
+```
+
+##### Headers
+- `Authorization: Bearer {jwt_token}` (required)
+- `X-Organization-ID: {organizationId}` (required)
+
+##### Example Request
+```http
+GET /v1/headless/customers/9b0d801f-41ac-4269-abec-f279dc54e849/tos
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
+```
+
+##### Example Response (TOS Pending)
+```json
+{
+  "tosUrl": "https://api.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849",
+  "status": "pending",
+  "acceptedAt": null,
+  "customerName": "Alice Johnson",
+  "email": "alice@example.com"
+}
+```
+
+##### Example Response (TOS Accepted)
+```json
+{
+  "tosUrl": "",
+  "status": "accepted",
+  "acceptedAt": "2025-08-26T17:15:22.123456Z",
+  "customerName": "Alice Johnson",
+  "email": "alice@example.com"
+}
+```
+
+##### Example Response (Not Required)
+```json
+{
+  "tosUrl": "",
+  "status": "not_required",
+  "acceptedAt": null,
+  "customerName": "Alice Johnson",
+  "email": "alice@example.com"
+}
+```
+
+**TOS Flow:**
+
+1. Customer completes KYC and is approved
+2. Call GET `/v1/headless/customers/{customerId}/tos` to get TOS link
+3. If status is "pending", redirect customer to the `tosUrl`
+4. Customer accepts TOS on Bridge's platform
+5. Bridge sends webhook to update TOS status
+6. Customer can now perform transactions
+
+**Key Features:**
+- Only available after KYC approval (returns 400 if KYC not approved)
+- Returns Infinite-owned URL that redirects to Bridge
+- Session-based with 24-hour expiration
+- Automatic status tracking via Bridge webhooks
+- No need to store TOS acceptance locally
+
+**TOS Status Values:**
+- `pending` - TOS needs to be accepted
+- `accepted` - TOS has been accepted
+- `not_required` - TOS not required for this customer
 
 ---
 
