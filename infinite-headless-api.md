@@ -668,16 +668,16 @@ POST /v1/headless/quotes
 - **flow**: `string` (required) - Either "ONRAMP" or "OFFRAMP"
 - **source**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to convert
+  - `amount`: `decimal` (optional) - Amount to convert from
   - `network`: `string` (optional) - Blockchain network for crypto assets
 - **target**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to receive (if source amount not provided)
+  - `amount`: `decimal` (optional) - Amount to receive
   - `network`: `string` (optional) - Blockchain network for crypto assets
 
-> **Note:** You must provide either `source.amount` or `target.amount`, but not both.
+> **Note:** You must provide either `source.amount` (source-based) or `target.amount` (target-based), but not both.
 
-#### Example Request (On-Ramp: USD → USDC)
+#### Example Request (Source-Based: USD → USDC)
 
 ```json
 {
@@ -693,23 +693,39 @@ POST /v1/headless/quotes
 }
 ```
 
+#### Example Request (Target-Based: USD → USDT)
+
+```json
+{
+  "flow": "ONRAMP",
+  "source": { 
+    "asset": "USD"
+  },
+  "target": { 
+    "asset": "USDT",
+    "amount": 1000
+  }
+}
+```
+
 #### Example Response
 
 ```json
 {
-  "quoteId": "quote_hls_xyz123abc456",
+  "quoteId": "5e845999-5bf2-46a1-82c9-661f926ae8e9",
   "flow": "ONRAMP",
   "source": { 
     "asset": "USD", 
-    "amount": 1000.0 
+    "amount": 1015.23,
+    "network": null
   },
   "target": { 
-    "asset": "USDC", 
+    "asset": "USDT", 
     "network": "ethereum", 
-    "amount": 990.0 
+    "amount": 1000
   },
-  "infiniteFee": 5.0,
-  "edgeFee": 5.0
+  "infiniteFee": 10.15,
+  "edgeFee": 5.08
 }
 ```
 
@@ -768,9 +784,8 @@ POST /v1/headless/quotes
 
 ### Fee Structure
 
-- **infiniteFee**: Fee charged by Infinite (0.5% of transaction)
-- **edgeFee**: Additional fee charged by Edge (0.5% of transaction)
-- **Total Fee**: 1% of transaction amount
+- **infiniteFee**: Fee charged by Infinite (1% of source amount)
+- **edgeFee**: Additional fee charged by Edge (0.5% of source amount)
 
 > **Rate Source:** Exchange rates are fetched in real-time from DeFiLlama price API.
 
