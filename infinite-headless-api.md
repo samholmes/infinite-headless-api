@@ -613,26 +613,30 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 ### Add Bank Account
 
-Link a bank account for fiat payments (ACH transfers).
+Link a bank account for fiat payments (ACH transfers). Requires an approved customer through Bridge/Persona KYC with valid address information.
 
-- **type**: `string` (required)
-- **bank_name**: `string` (required)
-- **account_name**: `string` (required)
-- **account_owner_name**: `string` (required)
+- **type**: `string` (required) - Must be "bank_account"
+- **bankName**: `string` (required) - Name of the bank (max 100 characters)
+- **accountNumber**: `string` (required) - Bank account number (4-17 digits)
+- **routingNumber**: `string` (required) - 9-digit ABA routing number with valid checksum
+- **accountName**: `string` (required) - Account nickname (max 100 characters)
+- **accountOwnerName**: `string` (required) - Legal name of account owner (max 100 characters)
 
 ```http
-POST /accounts
+POST /v1/headless/accounts
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
 ```json
 {
   "type": "bank_account",
-  "bank_name": "Chase Bank",
-  "account_number": "12345678901234",
-  "routing_number": "021000021",
-  "account_name": "Main Checking",
-  "account_owner_name": "Alice Johnson"
+  "bankName": "Chase Bank",
+  "accountNumber": "12345678901234",
+  "routingNumber": "021000021",
+  "accountName": "Main Checking",
+  "accountOwnerName": "Alice Johnson"
 }
 ```
 
@@ -640,14 +644,70 @@ POST /accounts
 
 ```json
 {
-  "id": "acct_bank_xyz789abc123def456",
+  "id": "acct_bank_fa5efd54d1f7403cb2d2fe1d04290968",
   "type": "bank_account",
-  "bank_name": "Chase Bank",
-  "account_name": "Main Checking",
-  "last_4": "1234",
-  "verification_status": "pending"
+  "bankName": "Chase Bank",
+  "accountName": "Main Checking",
+  "last4": "1234",
+  "verificationStatus": "active"
 }
 ```
+
+#### Requirements & Validation
+
+**Customer Requirements:**
+- Customer must have `ACTIVE` status (KYC approved)
+- Customer must have valid residential address from KYC process
+- Customer must be associated with the authenticated wallet
+
+**Account Validation:**
+- Account number: 4-17 digits (spaces and dashes allowed)
+- Routing number: Exactly 9 digits with valid ABA checksum
+- All text fields have maximum length limits for security
+- Duplicate accounts for the same customer are rejected by Bridge
+
+**Address Integration:**
+- Customer address is automatically extracted from KYC data (`residentialAddress` object)
+- Address must include: `streetLine1`, `city`, `state`, `postalCode`
+- Address is required for Bridge API compliance and cannot be bypassed
+
+#### Error Responses
+
+```json
+// Customer not approved
+{
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Customer must be approved before adding accounts. Current status: PENDING. Please complete KYC verification."
+}
+
+// Missing address information
+{
+  "title": "Bad Request", 
+  "status": 400,
+  "detail": "Customer address is required for bank account creation. Please ensure the customer has completed KYC with valid address information."
+}
+
+// Invalid routing number
+{
+  "title": "Bad Request",
+  "status": 400, 
+  "detail": "Routing number must be exactly 9 digits"
+}
+
+// Duplicate account
+{
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Failed to create bank account: duplicate_external_account - An external account with the same information has already been added for this customer"
+}
+```
+
+**Bridge Integration:**
+- Creates external account synchronously via Bridge API
+- Uses customer's KYC address for compliance
+- Account verification handled by Bridge
+- Returns Bridge account ID for downstream transfers
 
 > **Note:** Wallet addresses are used directly in transfers without pre-registration. Only bank accounts need to be added through this endpoint.
 
