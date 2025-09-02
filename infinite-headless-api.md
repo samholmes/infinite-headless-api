@@ -923,100 +923,179 @@ POST /v2/quotes
 
 ### Execute Transfer
 
-Execute a transfer based on a valid quote.
+Create a new transfer for on-ramp (bank → crypto) or off-ramp (crypto → bank) operations.
 
-- **type**: `string` (required)
-- **quoteId**: `string` (required)
+#### Headers
+- **Idempotency-Key**: `string` (required) - Unique key to prevent duplicate transfers
+- **Authorization**: `Bearer {jwt_token}` (required)
+- **X-Organization-ID**: `{organization_id}` (required)
+
+#### Request Body
+- **type**: `string` (required) - "ONRAMP" or "OFFRAMP"
+- **amount**: `number` (required) - Transfer amount
 - **source**: `object` (required)
-  - For on-ramp: `accountId` (bank account)
-  - For off-ramp: `address` (wallet address), `asset`, `amount`, and `network`
+  - For on-ramp: `currency`, `paymentRail`, `accountId` (Infinite account ID)
+  - For off-ramp: `currency`, `paymentRail`, `fromAddress` (wallet address)
 - **destination**: `object` (required)
-  - For on-ramp: `address` (wallet address), `asset`, and `network`
-  - For off-ramp: `accountId` (bank account)
-- **autoExecute**: `boolean`
+  - For on-ramp: `currency`, `paymentRail`, `toAddress` (wallet address)
+  - For off-ramp: `currency`, `paymentRail`, `accountId` (Infinite account ID)
+- **clientReferenceId**: `string` (optional) - Your reference ID
+- **developerFee**: `string` (optional) - Developer fee amount
 
 ```http
-POST /transfers
+POST /v1/headless/transfers
 ```
 
 #### On-Ramp Transfer Example (Bank → Crypto)
-```json
-{
-  "type": "ONRAMP",
-  "quoteId": "quote_xyz123abc456def789",
-  "source": { "accountId": "acct_bank_xyz789abc123def456" },
-  "destination": { "address": "0x742d35cc6ab26c82c3b8c85c8a7e3c7b1234567890", "asset": "USDC", "network": "ethereum" },
-  "autoExecute": true
-}
+
+```bash
+curl -X POST https://api.infinite.ai/v1/headless/transfers \
+  -H "Authorization: Bearer {jwt_token}" \
+  -H "X-Organization-ID: {organization_id}" \
+  -H "Idempotency-Key: unique-transfer-key-123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "ONRAMP",
+    "amount": 100.0,
+    "source": {
+      "currency": "usd",
+      "paymentRail": "wire",
+      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+    },
+    "destination": {
+      "currency": "usdc",
+      "paymentRail": "ethereum",
+      "toAddress": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+    },
+    "clientReferenceId": "my-onramp-001",
+    "developerFee": "0.0"
+  }'
 ```
 
 #### On-Ramp Transfer Response
 ```json
 {
-  "data": {
-    "id": "transfer_onramp_abc123",
-    "organizationId": "org_edge_wallet_main",
-    "type": "ONRAMP",
-    "source": { "asset": "USD", "amount": 1000.0, "network": "ach_push" },
-    "destination": { "asset": "USDC", "amount": 995.0, "network": "ethereum" },
-    "status": "Pending",
-    "stage": "awaiting_funds",
-    "createdAt": "2024-06-30T16:10:30Z",
-    "updatedAt": "2024-06-30T16:10:30Z",
-    "completedAt": null,
-    "sourceDepositInstructions": {
-      "amount": 1000.0,
-      "currency": "USD",
-      "paymentRail": "ach_push",
-      "bank": {
-        "name": "Lead Bank",
-        "accountNumber": "1000682791",
-        "routingNumber": "101206101"
-      },
-      "accountHolder": {
-        "name": "Infinite Payments LLC"
-      },
-      "memo": "TRANSFER_ABC123"
-    },
-    "fees": []
-  }
+  "id": "e5954be9-c229-4fbc-941f-2e7efb198edd",
+  "type": "ONRAMP",
+  "status": "AwaitingFunds",
+  "stage": "awaiting_funds",
+  "amount": 100.0,
+  "currency": "USD",
+  "source": {
+    "currency": "usd",
+    "paymentRail": "wire",
+    "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03",
+    "fromAddress": null
+  },
+  "destination": {
+    "currency": "usdc",
+    "paymentRail": "ethereum",
+    "accountId": null,
+    "toAddress": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045"
+  },
+  "sourceDepositInstructions": {
+    "paymentRail": "wire",
+    "currency": "usd",
+    "amount": 100.0,
+    "depositMessage": "Your reference code is 7fa4fb35-59d7-42c9-b0aa-66a4f5b34cf3. Please include this code in your wire transfer.",
+    "bankAccountNumber": "8312008517",
+    "bankRoutingNumber": "021000021",
+    "bankBeneficiaryName": "Customer Bank Account",
+    "bankName": "JPMorgan Chase Bank",
+    "toAddress": null,
+    "fromAddress": null
+  },
+  "createdAt": "2025-01-09T23:18:45.123Z",
+  "updatedAt": "2025-01-09T23:18:45.123Z"
 }
 ```
 
 #### Off-Ramp Transfer Example (Crypto → Bank)
-```json
-{
-  "type": "OFFRAMP",
-  "quoteId": "quote_abc456def789xyz123",
-  "source": { "address": "0x742d35cc6ab26c82c3b8c85c8a7e3c7b1234567890", "asset": "USDC", "amount": 1000.0, "network": "ethereum" },
-  "destination": { "accountId": "acct_bank_xyz789abc123def456" },
-  "autoExecute": true
-}
+
+```bash
+curl -X POST https://api.infinite.ai/v1/headless/transfers \
+  -H "Authorization: Bearer {jwt_token}" \
+  -H "X-Organization-ID: {organization_id}" \
+  -H "Idempotency-Key: unique-transfer-key-456" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "OFFRAMP",
+    "amount": 50.0,
+    "source": {
+      "currency": "usdc",
+      "paymentRail": "ethereum",
+      "fromAddress": "0x7E40e22EF038FD3017F5D1F5974a73eD41e13064"
+    },
+    "destination": {
+      "currency": "usd",
+      "paymentRail": "ach",
+      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+    },
+    "clientReferenceId": "my-offramp-001",
+    "developerFee": "0.0"
+  }'
 ```
 
 #### Off-Ramp Transfer Response
 ```json
 {
-  "data": {
-    "id": "transfer_offramp_def456",
-    "organizationId": "org_edge_wallet_main",
-    "type": "OFFRAMP",
-    "source": { "asset": "USDC", "amount": 1000.0, "network": "ethereum" },
-    "destination": { "asset": "USD", "amount": 985.0, "network": "ach_push" },
-    "status": "Pending",
-    "stage": "awaiting_crypto",
-    "createdAt": "2024-06-30T16:15:10Z",
-    "updatedAt": "2024-06-30T16:15:10Z",
-    "completedAt": null,
-    "sourceDepositInstructions": {
-      "paymentRail": "ethereum",
-      "depositAddress": "0x123abc456def789ghi012jkl345mno678pqr901stu234",
-      "memo": "TRANSFER_DEF456"
-    },
-    "fees": []
-  }
+  "id": "e5954be9-c229-4fbc-941f-2e7efb198edd",
+  "type": "OFFRAMP",
+  "status": "AwaitingFunds",
+  "stage": "awaiting_funds",
+  "amount": 50.0,
+  "currency": "USDC",
+  "source": {
+    "currency": "usdc",
+    "paymentRail": "ethereum",
+    "accountId": null,
+    "fromAddress": "0x7e40e22ef038fd3017f5d1f5974a73ed41e13064"
+  },
+  "destination": {
+    "currency": "usd",
+    "paymentRail": "ach",
+    "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03",
+    "toAddress": null
+  },
+  "sourceDepositInstructions": {
+    "paymentRail": "ethereum",
+    "currency": "usdc",
+    "amount": 50.0,
+    "depositMessage": null,
+    "bankAccountNumber": null,
+    "bankRoutingNumber": null,
+    "bankBeneficiaryName": null,
+    "bankName": null,
+    "toAddress": "0xdeadbeef2usdcethereumc560c5db-7fad-4c41-b552-453440c99664",
+    "fromAddress": "0x7e40e22ef038fd3017f5d1f5974a73ed41e13064"
+  },
+  "createdAt": "2025-01-09T23:19:30.456Z",
+  "updatedAt": "2025-01-09T23:19:30.456Z"
 }
 ```
+
+### Transfer Status Values
+
+Transfers can have the following status values:
+
+- **Pending**: Transfer initiated but not yet processing
+- **AwaitingFunds**: Waiting for funds to be deposited (either bank wire or crypto)
+- **InReview**: Transfer is under review
+- **Processing**: Transfer is being processed
+- **Completed**: Transfer successfully completed
+- **Failed**: Transfer failed
+- **Refunded**: Transfer was refunded
+- **Cancelled**: Transfer was cancelled
+
+### Important Notes
+
+1. **Idempotency**: Always provide a unique `Idempotency-Key` header to prevent duplicate transfers
+2. **Account IDs**: Use Infinite account IDs (not external provider IDs) in requests
+3. **Deposit Instructions**: 
+   - For ONRAMP: Follow the wire transfer instructions in `sourceDepositInstructions`
+   - For OFFRAMP: Send crypto to the address in `sourceDepositInstructions.toAddress`
+4. **Payment Rails**: Specify the exact payment method (e.g., "wire", "ach", "ethereum")
+5. **Currencies**: Use lowercase currency codes (e.g., "usd", "usdc")
 
 ---
 
@@ -1025,42 +1104,44 @@ POST /transfers
 Retrieve detailed information about a transfer.
 
 ```http
-GET /transfers/{transferId}
+GET /v1/headless/transfers/{transferId}
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
 
-```http
-GET /transfers/transfer_onramp_abc123
+```bash
+curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941f-2e7efb198edd \
+  -H "Authorization: Bearer {jwt_token}" \
+  -H "X-Organization-ID: {organization_id}"
 ```
 
 #### Example Response
 
 ```json
 {
-  "data": {
-    "id": "transfer_onramp_abc123",
-    "organizationId": "org_edge_wallet_main",
-    "type": "ONRAMP",
-    "source": { "asset": "USD", "amount": 1000.0, "network": "ach_push" },
-    "destination": { "asset": "USDC", "amount": 995.0, "network": "ethereum" },
-    "status": "Completed",
-    "stage": "completed",
-    "createdAt": "2024-06-30T16:10:30Z",
-    "updatedAt": "2024-07-01T09:22:33Z",
-    "completedAt": "2024-07-01T09:22:33Z",
-    "transactionHash": "0x8f4c2a7e3d9b6f1c5e8a2d7b4f9c3e6a1d8f5c2e9b7a4d1f6e3c8b5a2f9d6c1e4a7b",
-    "blockNumber": 18456789,
-    "confirmations": 24,
-    "fees": [],
-    "statusHistory": [
-      { "status": "Completed", "stage": "completed", "timestamp": "2024-07-01T09:22:33Z", "reason": null },
-      { "status": "Pending", "stage": "blockchain_pending", "timestamp": "2024-07-01T09:18:12Z", "reason": null },
-      { "status": "Pending", "stage": "fiat_to_crypto", "timestamp": "2024-07-01T09:16:45Z", "reason": null },
-      { "status": "Pending", "stage": "payment_received", "timestamp": "2024-07-01T09:15:22Z", "reason": null },
-      { "status": "Pending", "stage": "awaiting_funds", "timestamp": "2024-06-30T16:10:30Z", "reason": null }
-    ]
-  }
+  "id": "e5954be9-c229-4fbc-941f-2e7efb198edd",
+  "type": "ONRAMP",
+  "status": "Processing",
+  "stage": "payment_received",
+  "amount": 100.0,
+  "currency": "USD",
+  "source": {
+    "currency": "usd",
+    "paymentRail": "wire",
+    "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03",
+    "fromAddress": null
+  },
+  "destination": {
+    "currency": "usdc",
+    "paymentRail": "ethereum",
+    "accountId": null,
+    "toAddress": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045"
+  },
+  "sourceDepositInstructions": null,
+  "createdAt": "2025-01-09T23:18:45.123Z",
+  "updatedAt": "2025-01-09T23:25:10.456Z"
 }
 ```
 
