@@ -1149,17 +1149,25 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
 
 ### Transfer Stages
 
+The `stage` field contains the detailed state from the payment provider. Common stages include:
+
 | Stage              | Description                                             |
 |--------------------|--------------------------------------------------------|
-| `awaiting_funds`   | On-Ramp: Waiting for ACH payment from customer’s bank  |
-| `awaiting_crypto`  | Off-Ramp: Waiting for crypto deposit to our address    |
-| `payment_received` | Bank payment received and verified                     |
-| `fiat_to_crypto`   | Converting USD to cryptocurrency                       |
-| `crypto_to_fiat`   | Converting cryptocurrency to USD                       |
-| `blockchain_pending`| Transaction submitted to blockchain, awaiting confirmation |
-| `completed`         | Transfer successfully completed                        |
+| `awaiting_funds`   | **On-Ramp**: Waiting for wire/ACH payment from customer's bank<br>**Off-Ramp**: Waiting for crypto deposit |
+| `awaiting_crypto`  | Waiting for cryptocurrency deposit                     |
+| `funds_received`   | Funds have been received and are being processed      |
+| `payment_submitted`| Payment has been submitted for processing              |
+| `payment_processed`| Payment has been processed successfully                |
+| `pending`          | Transfer is pending                                    |
+| `in_review`        | Transfer is under manual review                        |
+| `kyc_required`     | Additional KYC verification needed                     |
+| `completed`        | Transfer successfully completed                        |
+| `sent`             | Funds have been sent to destination                   |
+| `cancelled`        | Transfer was cancelled                                 |
+| `error`            | Transfer failed due to an error                       |
+| `refunded`         | Transfer was refunded                                 |
 
-> **Transaction Hash:** The `transactionHash` field contains the Ethereum transaction hash (32 bytes as hex with 0x prefix). This unique identifier can be used to track the transfer on Etherscan or similar blockchain explorers.
+> **Note**: The exact stage values depend on the payment provider and transfer type. The `status` field provides a simplified view mapped from these detailed stages.
 
 ---
 
