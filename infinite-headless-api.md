@@ -622,7 +622,7 @@ Link a bank account for fiat payments (ACH transfers).
 - **accountOwnerName**: `string` (required)
 
 ```http
-POST /accounts
+POST /v1/headless/accounts
 ```
 
 #### Example Request
