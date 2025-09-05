@@ -530,31 +530,34 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 ### Terms of Service (TOS)
 
-Customers can access and accept Bridge's Terms of Service immediately after account creation, even before KYC approval.
+Customers must accept Terms of Service before they can perform transfers. TOS can be completed independently of KYC verification.
 
-#### Get TOS Link
+#### Get TOS Status and Link
 
-Retrieve the Terms of Service acceptance link and status for a customer.
+Check if a customer has accepted TOS and get the acceptance link if needed.
 
 ```http
-GET /v1/headless/customers/{customerId}/tos
+GET /v1/headless/customers/{customerId}/tos?callback={redirectUrl}
 ```
+
+##### Parameters
+- **callback** (optional): URL to redirect after TOS acceptance (defaults to `edge://tos-complete`)
 
 ##### Headers
 - `Authorization: Bearer {jwt_token}` (required)
 - `X-Organization-ID: {organizationId}` (required)
 
 ##### Example Request
-```http
-GET /v1/headless/customers/9b0d801f-41ac-4269-abec-f279dc54e849/tos
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
+```bash
+curl -X GET https://api.infinite.ai/v1/headless/customers/9b0d801f-41ac-4269-abec-f279dc54e849/tos?callback=edge://tos-complete \
+  -H "Authorization: Bearer {jwt_token}" \
+  -H "X-Organization-ID: {organization_id}"
 ```
 
-##### Example Response (TOS Pending)
+##### Response When TOS Pending
 ```json
 {
-  "tosUrl": "https://api.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849",
+  "tosUrl": "https://api.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849&callback=edge%3A%2F%2Ftos-complete",
   "status": "pending",
   "acceptedAt": null,
   "customerName": "Alice Johnson",
@@ -562,7 +565,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 }
 ```
 
-##### Example Response (TOS Accepted)
+##### Response When TOS Accepted
 ```json
 {
   "tosUrl": "",
@@ -573,38 +576,77 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 }
 ```
 
-##### Example Response (Not Required)
-```json
-{
-  "tosUrl": "",
-  "status": "not_required",
-  "acceptedAt": null,
-  "customerName": "Alice Johnson",
-  "email": "alice@example.com"
+#### TOS Integration Flow
+
+```
+1. Create customer → Returns customer ID
+2. Check TOS status → GET /v1/headless/customers/{customerId}/tos
+3. If status = "pending":
+   - Open tosUrl in webview/browser
+   - User accepts TOS
+   - User is redirected to your callback URL
+4. Poll TOS status until "accepted"
+5. Customer can now perform transfers
+```
+
+#### Implementation Example (Edge Wallet)
+
+```javascript
+// 1. Check TOS status
+const tosResponse = await fetch(`${API_URL}/v1/headless/customers/${customerId}/tos?callback=edge://tos-complete`, {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'X-Organization-ID': organizationId
+  }
+});
+
+const tosData = await tosResponse.json();
+
+// 2. Handle based on status
+if (tosData.status === 'pending') {
+  // Open TOS URL in webview
+  await openWebView(tosData.tosUrl);
+  
+  // Wait for callback or poll status
+  await waitForTosAcceptance(customerId);
+} else if (tosData.status === 'accepted') {
+  // TOS already accepted, proceed with transfers
+  console.log('TOS accepted at:', tosData.acceptedAt);
+}
+
+// 3. Poll for TOS acceptance
+async function waitForTosAcceptance(customerId) {
+  let accepted = false;
+  while (!accepted) {
+    await sleep(2000); // Wait 2 seconds
+    
+    const response = await fetch(`${API_URL}/v1/headless/customers/${customerId}/tos`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Organization-ID': organizationId
+      }
+    });
+    
+    const data = await response.json();
+    if (data.status === 'accepted') {
+      accepted = true;
+    }
+  }
 }
 ```
 
-**TOS Flow:**
+#### Important Notes
 
-1. Customer is created via headless SDK
-2. Call GET `/v1/headless/customers/{customerId}/tos` to get TOS link (available immediately)
-3. If status is "pending", redirect customer to the `tosUrl`
-4. Customer accepts TOS on Bridge's platform (can be done in parallel with KYC)
-5. Bridge sends webhook to update TOS status
-6. Once both KYC and TOS are complete, customer can perform transactions
+1. **TOS Independence**: TOS can be completed before, during, or after KYC verification
+2. **Session Persistence**: The same TOS session link is returned for 24 hours
+3. **Status Tracking**: TOS acceptance is automatically tracked - no need to store locally
+4. **Transfer Requirement**: Both TOS acceptance and KYC approval are required for transfers
+5. **Sandbox Behavior**: In sandbox, you may see `about:blank` redirect after acceptance - this is normal
 
-**Key Features:**
-- Available immediately after customer creation (no need to wait for KYC approval)
-- Returns Infinite-owned URL that redirects to Bridge
-- Session-based with 24-hour expiration
-- Automatic status tracking via Bridge webhooks
-- No need to store TOS acceptance locally
-- Can be completed in parallel with KYC for better user experience
-
-**TOS Status Values:**
-- `pending` - TOS needs to be accepted
-- `accepted` - TOS has been accepted
-- `not_required` - TOS not required for this customer
+#### TOS Status Values
+- **pending**: User needs to accept TOS
+- **accepted**: TOS has been accepted
+- **not_required**: TOS not required (rare case)
 
 ---
 
