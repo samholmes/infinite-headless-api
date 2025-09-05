@@ -90,8 +90,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
   "message": "Sign this message to authenticate with Infinite Agents.\n\nPublicKey: 0x742d35Cc6634C0532925a3b844Bc9e7595f2BD6\nNonce: a1b2c3d4e5f6g7h8i9j0\nTimestamp: 1756182166",
   "domain": null,
   "expires_at": 1756182466,
-  "expires_at_iso": "2025-08-26T04:27:46.824560+00:00",
-  "expires_in": 300
+  "expires_at_iso": "2025-08-26T04:27:46.824560+00:00"
 }
 ```
 
@@ -129,7 +128,7 @@ X-Organization-ID: {organization_id}
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "customer_id": "550e8400-e29b-41d4-a716-446655440000",
   "session_id": "sess_abc123def456",
   "platform": "web",
   "onboarded": false
@@ -141,7 +140,7 @@ X-Organization-ID: {organization_id}
 - `access_token`: JWT token for authenticated requests
 - `token_type`: Always "Bearer"
 - `expires_in`: Token lifetime in seconds (typically 3600)
-- `user_id`: Unique identifier for the wallet user
+- `customer_id`: Unique identifier for the customer (can be null if not yet onboarded)
 - `session_id`: Unique identifier for this authentication session
 - `platform`: The platform used for authentication
 - `onboarded`: Indicates if the wallet has completed customer onboarding (KYC)
@@ -613,19 +612,17 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 ### Add Bank Account
 
-Link a bank account for fiat payments (ACH transfers). Requires an approved customer through Bridge/Persona KYC with valid address information.
+Link a bank account for fiat payments (ACH transfers).
 
-- **type**: `string` (required) - Must be "bank_account"
-- **bankName**: `string` (required) - Name of the bank (max 100 characters)
-- **accountNumber**: `string` (required) - Bank account number (4-17 digits)
-- **routingNumber**: `string` (required) - 9-digit ABA routing number with valid checksum
-- **accountName**: `string` (required) - Account nickname (max 100 characters)
-- **accountOwnerName**: `string` (required) - Legal name of account owner (max 100 characters)
+- **type**: `string` (required)
+- **bankName**: `string` (required)
+- **accountNumber**: `string` (required)
+- **routingNumber**: `string` (required)
+- **accountName**: `string` (required)
+- **accountOwnerName**: `string` (required)
 
 ```http
 POST /v1/headless/accounts
-Authorization: Bearer {jwt_token}
-X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
@@ -644,70 +641,14 @@ X-Organization-ID: {organization_id}
 
 ```json
 {
-  "id": "acct_bank_fa5efd54d1f7403cb2d2fe1d04290968",
+  "id": "acct_bank_xyz789abc123def456",
   "type": "bank_account",
   "bankName": "Chase Bank",
   "accountName": "Main Checking",
   "last4": "1234",
-  "verificationStatus": "active"
+  "verificationStatus": "pending"
 }
 ```
-
-#### Requirements & Validation
-
-**Customer Requirements:**
-- Customer must have `ACTIVE` status (KYC approved)
-- Customer must have valid residential address from KYC process
-- Customer must be associated with the authenticated wallet
-
-**Account Validation:**
-- Account number: 4-17 digits (spaces and dashes allowed)
-- Routing number: Exactly 9 digits with valid ABA checksum
-- All text fields have maximum length limits for security
-- Duplicate accounts for the same customer are rejected by Bridge
-
-**Address Integration:**
-- Customer address is automatically extracted from KYC data (`residentialAddress` object)
-- Address must include: `streetLine1`, `city`, `state`, `postalCode`
-- Address is required for Bridge API compliance and cannot be bypassed
-
-#### Error Responses
-
-```json
-// Customer not approved
-{
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "Customer must be approved before adding accounts. Current status: PENDING. Please complete KYC verification."
-}
-
-// Missing address information
-{
-  "title": "Bad Request", 
-  "status": 400,
-  "detail": "Customer address is required for bank account creation. Please ensure the customer has completed KYC with valid address information."
-}
-
-// Invalid routing number
-{
-  "title": "Bad Request",
-  "status": 400, 
-  "detail": "Routing number must be exactly 9 digits"
-}
-
-// Duplicate account
-{
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "Failed to create bank account: duplicate_external_account - An external account with the same information has already been added for this customer"
-}
-```
-
-**Bridge Integration:**
-- Creates external account synchronously via Bridge API
-- Uses customer's KYC address for compliance
-- Account verification handled by Bridge
-- Returns Bridge account ID for downstream transfers
 
 > **Note:** Wallet addresses are used directly in transfers without pre-registration. Only bank accounts need to be added through this endpoint.
 
@@ -813,16 +754,16 @@ POST /v1/headless/quotes
 - **flow**: `string` (required) - Either "ONRAMP" or "OFFRAMP"
 - **source**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to convert from
+  - `amount`: `decimal` (optional) - Amount to convert
   - `network`: `string` (optional) - Blockchain network for crypto assets
 - **target**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to receive
+  - `amount`: `decimal` (optional) - Amount to receive (if source amount not provided)
   - `network`: `string` (optional) - Blockchain network for crypto assets
 
-> **Note:** You must provide either `source.amount` (source-based) or `target.amount` (target-based), but not both.
+> **Note:** You must provide either `source.amount` or `target.amount`, but not both.
 
-#### Example Request (Source-Based: USD → USDC)
+#### Example Request (On-Ramp: USD → USDC)
 
 ```json
 {
@@ -838,39 +779,23 @@ POST /v1/headless/quotes
 }
 ```
 
-#### Example Request (Target-Based: USD → USDT)
-
-```json
-{
-  "flow": "ONRAMP",
-  "source": { 
-    "asset": "USD"
-  },
-  "target": { 
-    "asset": "USDT",
-    "amount": 1000
-  }
-}
-```
-
 #### Example Response
 
 ```json
 {
-  "quoteId": "5e845999-5bf2-46a1-82c9-661f926ae8e9",
+  "quoteId": "quote_hls_xyz123abc456",
   "flow": "ONRAMP",
   "source": { 
     "asset": "USD", 
-    "amount": 1015.23,
-    "network": null
+    "amount": 1000.0 
   },
   "target": { 
-    "asset": "USDT", 
+    "asset": "USDC", 
     "network": "ethereum", 
-    "amount": 1000
+    "amount": 990.0 
   },
-  "infiniteFee": 10.15,
-  "edgeFee": 5.08
+  "infiniteFee": 5.0,
+  "edgeFee": 5.0
 }
 ```
 
@@ -976,74 +901,6 @@ POST /v1/headless/quotes
 > - All transfers create fee ledger entries for tracking (with 0 amounts for BTC/ETH)
 
 > **Rate Source:** Exchange rates are fetched in real-time from DeFiLlama price API.
-
----
-
-### Create Quote (Standard)
-
-Get real-time quotes for on-ramp (Bank → Crypto) or off-ramp (Crypto → Bank) conversions.
-
-- **flow**: `string` (required)
-- **source**: `object` (required)
-  - `asset`: Asset code (e.g., "USD", "USDC")
-  - `amount`: Amount to convert
-  - `network`: (Optional) Blockchain network for crypto assets
-- **target**: `object` (required)
-  - `asset`: Asset code (e.g., "USD", "USDC")
-  - `network`: (Optional) Blockchain network for crypto assets
-
-```http
-POST /v2/quotes
-```
-
-#### On-Ramp Quote Example (USD → USDC)
-```json
-{
-  "flow": "ONRAMP",
-  "source": { "asset": "USD", "amount": 1000.0 },
-  "target": { "asset": "USDC", "network": "ethereum" }
-}
-```
-
-#### On-Ramp Quote Response
-
-```json
-{
-  "quoteId": "quote_xyz123abc456def789",
-  "flow": "ONRAMP",
-  "source": { "asset": "USD", "amount": 1000.0 },
-  "target": { "asset": "USDC", "network": "ethereum", "amount": 995.0 },
-  "fee": 5.0,
-  "rate": 0.995,
-  "expiresAt": "2024-06-30T16:15:00Z"
-}
-```
-
-#### Off-Ramp Quote Example (USDC → USD)
-```json
-{
-  "flow": "OFFRAMP",
-  "source": { "asset": "USDC", "network": "ethereum", "amount": 1000.0 },
-  "target": { "asset": "USD" }
-}
-```
-
-#### Off-Ramp Quote Response
-
-```json
-{
-  "quoteId": "quote_abc456def789xyz123",
-  "flow": "OFFRAMP",
-  "source": { "asset": "USDC", "network": "ethereum", "amount": 1000.0 },
-  "target": { "asset": "USD", "amount": 985.0 },
-  "infiniteFee": 10.0,
-  "edgeFee": 5.0,
-  "totalReceived": 985.0,
-  "expiresAt": "2024-06-30T16:20:00Z"
-}
-```
-
-> **Important:** Quotes expire after the time specified in `expiresAt`. Always execute transfers before the quote expires to guarantee the quoted rate.
 
 ---
 
