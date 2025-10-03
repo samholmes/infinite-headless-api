@@ -21,7 +21,9 @@ The Headless SDK enables secure wallet authentication for your application, allo
 To integrate the Headless SDK, you'll need:
 
 - **Organization ID**: Provided during onboarding
-- **API Endpoint**: `https://api.infinite.ai`
+- **API Endpoints**:
+  - Production: `https://headless.infinite.dev`
+  - Sandbox: `https://sandbox.headless.infinite.dev`
 
 ### Organization Requirements
 
@@ -113,6 +115,7 @@ X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
+
 ```json
 {
   "public_key": "0x742d35Cc6634C0532925a3b844Bc9e7595f2BD6",
@@ -123,6 +126,7 @@ X-Organization-ID: {organization_id}
 ```
 
 #### Example Response
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
@@ -174,6 +178,7 @@ GET /auth/wallet/sessions
 ```
 
 **Example Response:**
+
 ```json
 {
   "sessions": [
@@ -277,9 +282,33 @@ GET /v1/headless/countries
         "offRamp": ["sepa"]
       },
       "memberStates": [
-        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
-        "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
-        "PL", "PT", "RO", "SK", "SI", "ES", "SE"
+        "AT",
+        "BE",
+        "BG",
+        "HR",
+        "CY",
+        "CZ",
+        "DK",
+        "EE",
+        "FI",
+        "FR",
+        "DE",
+        "GR",
+        "HU",
+        "IE",
+        "IT",
+        "LV",
+        "LT",
+        "LU",
+        "MT",
+        "NL",
+        "PL",
+        "PT",
+        "RO",
+        "SK",
+        "SI",
+        "ES",
+        "SE"
       ]
     },
     {
@@ -388,6 +417,7 @@ POST /v1/headless/customers
 ```
 
 #### Individual Customer Request
+
 ```json
 {
   "type": "individual",
@@ -405,6 +435,7 @@ POST /v1/headless/customers
 ```
 
 #### Business Customer Request
+
 ```json
 {
   "type": "business",
@@ -422,6 +453,7 @@ POST /v1/headless/customers
 ```
 
 #### Example Response
+
 ```json
 {
   "customer": {
@@ -459,11 +491,13 @@ GET /customers/{customerId}/kyc-link?redirectUrl={url}
 ```
 
 #### Example Request
+
 ```http
 GET /customers/12345678-1234-1234-1234-123456789012/kyc-link?redirectUrl=https://app.example.com/kyc-complete
 ```
 
 #### Example Response
+
 ```json
 {
   "url": "https://infinite.dev/kyc?session=kyc_sess_456&redirect=https://app.example.com/kyc-complete",
@@ -526,6 +560,61 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 - `paused` - KYC temporarily paused
 - `offboarded` - Customer has been offboarded
 
+#### Sandbox Testing
+
+In sandbox environments, you can test different KYC states without waiting for actual processing:
+
+##### 1. Time-Based Progression (Default)
+
+The sandbox automatically progresses through KYC states based on time elapsed since customer creation:
+
+- **0-1 minutes**: `incomplete`
+- **1-3 minutes**: `under_review`
+- **3-5 minutes**: `approved` (90% chance) or `rejected` (10% chance)
+- **5+ minutes**: `approved`
+
+##### 2. Explicit Status Override
+
+Force a specific KYC status using headers or query parameters:
+
+```http
+# Using header
+GET /v1/headless/customers/{customerId}/kyc-status
+X-Sandbox-KYC-Status: under_review
+
+# Using query parameter
+GET /v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=rejected
+```
+
+##### 3. Persona Test Mode
+
+Control the outcome at the 3-5 minute mark (simulating Persona's sandbox test mode):
+
+```http
+# Force approval
+X-Sandbox-Persona-Test-Mode: approved
+
+# Force rejection
+X-Sandbox-Persona-Test-Mode: rejected
+```
+
+**Example: Testing Rejection Flow**
+
+```javascript
+// Wait 3 minutes after customer creation, then force rejection
+const response = await fetch(
+  `${API_URL}/v1/headless/customers/${customerId}/kyc-status`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Organization-ID": orgId,
+      "X-Sandbox-Persona-Test-Mode": "rejected",
+    },
+  }
+);
+// Response: { "kycStatus": "rejected", ... }
+```
+
 ---
 
 ### Terms of Service (TOS)
@@ -541,10 +630,12 @@ GET /v1/headless/customers/{customerId}/tos
 ```
 
 ##### Headers
+
 - `Authorization: Bearer {jwt_token}` (required)
 - `X-Organization-ID: {organizationId}` (required)
 
 ##### Example Request
+
 ```http
 GET /v1/headless/customers/9b0d801f-41ac-4269-abec-f279dc54e849/tos
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
@@ -552,9 +643,10 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```
 
 ##### Example Response (TOS Pending)
+
 ```json
 {
-  "tosUrl": "https://api.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849",
+  "tosUrl": "https://headless.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849",
   "status": "pending",
   "acceptedAt": null,
   "customerName": "Alice Johnson",
@@ -563,6 +655,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```
 
 ##### Example Response (TOS Accepted)
+
 ```json
 {
   "tosUrl": "",
@@ -574,6 +667,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```
 
 ##### Example Response (Not Required)
+
 ```json
 {
   "tosUrl": "",
@@ -594,6 +688,7 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 6. Once both KYC and TOS are complete, customer can perform transactions
 
 **Key Features:**
+
 - Available immediately after customer creation (no need to wait for KYC approval)
 - Returns Infinite-owned URL that redirects to Bridge
 - Session-based with 24-hour expiration
@@ -602,9 +697,55 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 - Can be completed in parallel with KYC for better user experience
 
 **TOS Status Values:**
+
 - `pending` - TOS needs to be accepted
 - `accepted` - TOS has been accepted
 - `not_required` - TOS not required for this customer
+
+#### Sandbox Testing
+
+In sandbox environments, you can test different TOS states:
+
+##### Force TOS Status
+
+Use headers or query parameters to control TOS status:
+
+```http
+# Using header
+GET /v1/headless/customers/{customerId}/tos
+X-Sandbox-TOS-Status: accepted
+
+# Using query parameter
+GET /v1/headless/customers/{customerId}/tos?sandbox_tos_status=pending
+```
+
+**Example: Testing TOS Acceptance Flow**
+
+```javascript
+// Test pending TOS
+const pendingResponse = await fetch(
+  `${API_URL}/v1/headless/customers/${customerId}/tos?sandbox_tos_status=pending`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Organization-ID": orgId,
+    },
+  }
+);
+// Returns: { "status": "pending", "tosUrl": "...", ... }
+
+// Test accepted TOS
+const acceptedResponse = await fetch(
+  `${API_URL}/v1/headless/customers/${customerId}/tos?sandbox_tos_status=accepted`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Organization-ID": orgId,
+    },
+  }
+);
+// Returns: { "status": "accepted", "acceptedAt": "...", ... }
+```
 
 ---
 
@@ -626,6 +767,7 @@ POST /v1/headless/accounts
 ```
 
 #### Example Request
+
 ```json
 {
   "type": "bank_account",
@@ -768,13 +910,13 @@ POST /v1/headless/quotes
 ```json
 {
   "flow": "ONRAMP",
-  "source": { 
-    "asset": "USD", 
-    "amount": 1000.0 
+  "source": {
+    "asset": "USD",
+    "amount": 1000.0
   },
-  "target": { 
-    "asset": "USDC", 
-    "network": "ethereum" 
+  "target": {
+    "asset": "USDC",
+    "network": "ethereum"
   }
 }
 ```
@@ -785,14 +927,14 @@ POST /v1/headless/quotes
 {
   "quoteId": "quote_hls_xyz123abc456",
   "flow": "ONRAMP",
-  "source": { 
-    "asset": "USD", 
-    "amount": 1000.0 
+  "source": {
+    "asset": "USD",
+    "amount": 1000.0
   },
-  "target": { 
-    "asset": "USDC", 
-    "network": "ethereum", 
-    "amount": 990.0 
+  "target": {
+    "asset": "USDC",
+    "network": "ethereum",
+    "amount": 990.0
   },
   "infiniteFee": 5.0,
   "edgeFee": 5.0
@@ -804,13 +946,13 @@ POST /v1/headless/quotes
 ```json
 {
   "flow": "OFFRAMP",
-  "source": { 
-    "asset": "BTC", 
+  "source": {
+    "asset": "BTC",
     "amount": 0.5,
-    "network": "bitcoin" 
+    "network": "bitcoin"
   },
-  "target": { 
-    "asset": "USD" 
+  "target": {
+    "asset": "USD"
   }
 }
 ```
@@ -821,17 +963,17 @@ POST /v1/headless/quotes
 {
   "quoteId": "quote_hls_def789ghi012",
   "flow": "OFFRAMP",
-  "source": { 
-    "asset": "BTC", 
+  "source": {
+    "asset": "BTC",
     "amount": 0.5,
-    "network": "bitcoin" 
+    "network": "bitcoin"
   },
-  "target": { 
-    "asset": "USD", 
-    "amount": 25253.75 
+  "target": {
+    "asset": "USD",
+    "amount": 25253.75
   },
-  "infiniteFee": 0.00,
-  "edgeFee": 0.00
+  "infiniteFee": 0.0,
+  "edgeFee": 0.0
 }
 ```
 
@@ -840,11 +982,11 @@ POST /v1/headless/quotes
 ```json
 {
   "flow": "ONRAMP",
-  "source": { 
-    "asset": "USD", 
+  "source": {
+    "asset": "USD",
     "amount": 1000
   },
-  "target": { 
+  "target": {
     "asset": "ETH",
     "network": "ethereum"
   }
@@ -857,33 +999,36 @@ POST /v1/headless/quotes
 {
   "quoteId": "5e845999-5bf2-46a1-82c9-661f926ae8e9",
   "flow": "ONRAMP",
-  "source": { 
-    "asset": "USD", 
-    "amount": 1000.00,
+  "source": {
+    "asset": "USD",
+    "amount": 1000.0,
     "network": null
   },
-  "target": { 
-    "asset": "ETH", 
-    "network": "ethereum", 
+  "target": {
+    "asset": "ETH",
+    "network": "ethereum",
     "amount": 0.42
   },
-  "infiniteFee": 0.00,
-  "edgeFee": 0.00
+  "infiniteFee": 0.0,
+  "edgeFee": 0.0
 }
 ```
 
 ### Supported Assets
 
 **Cryptocurrencies:**
+
 - BTC (Bitcoin)
 - ETH (Ethereum)
 - USDC (USD Coin)
 - USDT (Tether)
 
 **Fiat Currencies:**
+
 - USD (US Dollar)
 
 **Networks:**
+
 - `bitcoin` - Bitcoin network
 - `ethereum` - Ethereum mainnet
 - `polygon` - Polygon network
@@ -896,6 +1041,7 @@ POST /v1/headless/quotes
 - **Total Fee**: 1.5%
 
 > **Important Note on Fees:**
+>
 > - **Stablecoin (USDC/USDT)**: Both quotes and transfers show 1.5% fees (1% Infinite + 0.5% Edge)
 > - **Non-stablecoin (BTC/ETH)**: Both quotes and transfers show 0% fees
 > - All transfers create fee ledger entries for tracking (with 0 amounts for BTC/ETH)
@@ -911,11 +1057,13 @@ POST /v1/headless/quotes
 Create a new transfer for on-ramp (bank → crypto) or off-ramp (crypto → bank) operations.
 
 #### Headers
+
 - **Idempotency-Key**: `string` (required) - Unique key to prevent duplicate transfers
 - **Authorization**: `Bearer {jwt_token}` (required)
 - **X-Organization-ID**: `{organization_id}` (required)
 
 #### Request Body
+
 - **type**: `string` (required) - "ONRAMP" or "OFFRAMP"
 - **amount**: `number` (required) - Transfer amount
 - **source**: `object` (required)
@@ -958,6 +1106,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 ```
 
 #### On-Ramp Transfer Response
+
 ```json
 {
   "id": "e5954be9-c229-4fbc-941f-2e7efb198edd",
@@ -991,9 +1140,9 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "fromAddress": null
   },
   "fees": {
-    "infiniteFee": 1.00,
-    "edgeFee": 0.50,
-    "total": 1.50,
+    "infiniteFee": 1.0,
+    "edgeFee": 0.5,
+    "total": 1.5,
     "currency": "USD"
   },
   "createdAt": "2025-01-09T23:18:45.123Z",
@@ -1028,6 +1177,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 ```
 
 #### Off-Ramp Transfer Response
+
 ```json
 {
   "id": "e5954be9-c229-4fbc-941f-2e7efb198edd",
@@ -1061,7 +1211,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "fromAddress": "0x7e40e22ef038fd3017f5d1f5974a73ed41e13064"
   },
   "fees": {
-    "infiniteFee": 0.50,
+    "infiniteFee": 0.5,
     "edgeFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
@@ -1097,6 +1247,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 ```
 
 The response for BTC/ETH transfers will show 0 fees since Bridge doesn't support developer fees for these assets:
+
 ```json
 {
   "fees": {
@@ -1126,12 +1277,12 @@ Transfers can have the following status values:
 
 1. **Idempotency**: Always provide a unique `Idempotency-Key` header to prevent duplicate transfers
 2. **Account IDs**: Use Infinite account IDs (not external provider IDs) in requests
-3. **Deposit Instructions**: 
+3. **Deposit Instructions**:
    - For ONRAMP: Follow the wire transfer instructions in `sourceDepositInstructions`
    - For OFFRAMP: Send crypto to the address in `sourceDepositInstructions.toAddress`
 4. **Networks**: Specify the exact payment network (e.g., "wire", "ach", "ethereum")
 5. **Currencies**: Use lowercase currency codes (e.g., "usd", "usdc")
-6. **Developer Fees**: 
+6. **Developer Fees**:
    - Only supported for stablecoin transfers (USDC/USDT)
    - Not supported for BTC/ETH transfers
    - Expressed as a percentage (e.g., "1.5" for 1.5%)
@@ -1145,7 +1296,7 @@ Transfers can have the following status values:
    - **Production**: All advertised routes are supported
    - **Sandbox Limitations**:
      - **USD → USDC/USDT**: ✅ Fully supported
-     - **USDC/USDT → USD**: ✅ Fully supported  
+     - **USDC/USDT → USD**: ✅ Fully supported
      - **USD → ETH**: ✅ Supported
      - **ETH → USD**: ✅ Supported
      - **USD → BTC**: ⚠️ Intermittent 500 errors (Bridge sandbox issue)
@@ -1196,9 +1347,9 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
     "network": "ethereum"
   },
   "fees": {
-    "infiniteFee": 1.00,
-    "edgeFee": 0.50,
-    "total": 1.50,
+    "infiniteFee": 1.0,
+    "edgeFee": 0.5,
+    "total": 1.5,
     "currency": "USD"
   },
   "expectedCompletionTime": null,
@@ -1237,7 +1388,7 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
     "network": "ach"
   },
   "fees": {
-    "infiniteFee": 0.50,
+    "infiniteFee": 0.5,
     "edgeFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
@@ -1293,21 +1444,21 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
 
 The `stage` field contains the detailed state from the payment provider. Common stages include:
 
-| Stage              | Description                                             |
-|--------------------|--------------------------------------------------------|
-| `awaiting_funds`   | **On-Ramp**: Waiting for wire/ACH payment from customer's bank<br>**Off-Ramp**: Waiting for crypto deposit |
-| `awaiting_crypto`  | Waiting for cryptocurrency deposit                     |
-| `funds_received`   | Funds have been received and are being processed      |
-| `payment_submitted`| Payment has been submitted for processing              |
-| `payment_processed`| Payment has been processed successfully                |
-| `pending`          | Transfer is pending                                    |
-| `in_review`        | Transfer is under manual review                        |
-| `kyc_required`     | Additional KYC verification needed                     |
-| `completed`        | Transfer successfully completed                        |
-| `sent`             | Funds have been sent to destination                   |
-| `cancelled`        | Transfer was cancelled                                 |
-| `error`            | Transfer failed due to an error                       |
-| `refunded`         | Transfer was refunded                                 |
+| Stage               | Description                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `awaiting_funds`    | **On-Ramp**: Waiting for wire/ACH payment from customer's bank<br>**Off-Ramp**: Waiting for crypto deposit |
+| `awaiting_crypto`   | Waiting for cryptocurrency deposit                                                                         |
+| `funds_received`    | Funds have been received and are being processed                                                           |
+| `payment_submitted` | Payment has been submitted for processing                                                                  |
+| `payment_processed` | Payment has been processed successfully                                                                    |
+| `pending`           | Transfer is pending                                                                                        |
+| `in_review`         | Transfer is under manual review                                                                            |
+| `kyc_required`      | Additional KYC verification needed                                                                         |
+| `completed`         | Transfer successfully completed                                                                            |
+| `sent`              | Funds have been sent to destination                                                                        |
+| `cancelled`         | Transfer was cancelled                                                                                     |
+| `error`             | Transfer failed due to an error                                                                            |
+| `refunded`          | Transfer was refunded                                                                                      |
 
 > **Note**: The exact stage values depend on the payment provider and transfer type. The `status` field provides a simplified view mapped from these detailed stages.
 
@@ -1335,6 +1486,7 @@ Each transfer creates a ledger entry with:
 - **status**: Fee status (pending, collected, settled)
 
 This enables:
+
 - Accurate partner rebate calculations
 - Fee reconciliation with payment providers
 - Complete transfer tracking across all asset types
@@ -1387,25 +1539,25 @@ All errors follow this structure:
 
 ### Common Error Codes
 
-| Code                    | HTTP Status | Description                              | Solution                                   |
-|-------------------------|-------------|------------------------------------------|--------------------------------------------|
-| `INVALID_PUBLIC_KEY`    | 400         | Invalid wallet public key format         | Verify public key is 42 characters starting with 0x |
-| `CHALLENGE_EXPIRED`     | 400         | Challenge nonce expired                  | Request a new challenge                    |
-| `INVALID_SIGNATURE`     | 400         | Signature verification failed            | Check message format and signing method    |
-| `NONCE_ALREADY_USED`    | 400         | Invalid or expired nonce                 | Request a new challenge                    |
-| `UNAUTHORIZED`          | 401         | Missing or invalid token                 | Re-authenticate                            |
-| `SESSION_EXPIRED`       | 401         | Authentication session expired           | Re-authenticate with wallet                |
-| `SESSION_NOT_FOUND`     | 404         | Session ID not found                     | Use valid session ID                       |
-| `ORGANIZATION_NOT_FOUND`| 404         | Organization with ID not found           | Check organization ID                      |
-| `ORGANIZATION_NOT_ACTIVE`| 400        | Organization is not active               | Contact support                            |
-| `WALLET_AUTH_DISABLED`  | 400         | Wallet authentication is not enabled for organization | Contact support to enable         |
-| `RATE_LIMITED`          | 429         | Too many requests                        | Wait and retry with backoff                |
-| `KYC_REQUIRED`          | 403         | KYC not completed                        | Complete KYC verification                  |
-| `KYC_REJECTED`          | 403         | KYC verification failed                  | Contact support                            |
-| `INVALID_QUOTE`         | 400         | Quote expired or invalid                 | Request new quote                          |
-| `INSUFFICIENT_BALANCE`  | 400         | Not enough funds                         | Check account balance                      |
-| `TRANSFER_FAILED`       | 400         | Transfer could not be processed          | Check transfer details                     |
-| `ACCOUNT_NOT_VERIFIED`  | 400         | Bank account not verified                | Complete account verification              |
+| Code                      | HTTP Status | Description                                           | Solution                                            |
+| ------------------------- | ----------- | ----------------------------------------------------- | --------------------------------------------------- |
+| `INVALID_PUBLIC_KEY`      | 400         | Invalid wallet public key format                      | Verify public key is 42 characters starting with 0x |
+| `CHALLENGE_EXPIRED`       | 400         | Challenge nonce expired                               | Request a new challenge                             |
+| `INVALID_SIGNATURE`       | 400         | Signature verification failed                         | Check message format and signing method             |
+| `NONCE_ALREADY_USED`      | 400         | Invalid or expired nonce                              | Request a new challenge                             |
+| `UNAUTHORIZED`            | 401         | Missing or invalid token                              | Re-authenticate                                     |
+| `SESSION_EXPIRED`         | 401         | Authentication session expired                        | Re-authenticate with wallet                         |
+| `SESSION_NOT_FOUND`       | 404         | Session ID not found                                  | Use valid session ID                                |
+| `ORGANIZATION_NOT_FOUND`  | 404         | Organization with ID not found                        | Check organization ID                               |
+| `ORGANIZATION_NOT_ACTIVE` | 400         | Organization is not active                            | Contact support                                     |
+| `WALLET_AUTH_DISABLED`    | 400         | Wallet authentication is not enabled for organization | Contact support to enable                           |
+| `RATE_LIMITED`            | 429         | Too many requests                                     | Wait and retry with backoff                         |
+| `KYC_REQUIRED`            | 403         | KYC not completed                                     | Complete KYC verification                           |
+| `KYC_REJECTED`            | 403         | KYC verification failed                               | Contact support                                     |
+| `INVALID_QUOTE`           | 400         | Quote expired or invalid                              | Request new quote                                   |
+| `INSUFFICIENT_BALANCE`    | 400         | Not enough funds                                      | Check account balance                               |
+| `TRANSFER_FAILED`         | 400         | Transfer could not be processed                       | Check transfer details                              |
+| `ACCOUNT_NOT_VERIFIED`    | 400         | Bank account not verified                             | Complete account verification                       |
 
 ---
 
@@ -1431,7 +1583,8 @@ INFINITE_ORG_ID=your_organization_id
    - Alternative: Encrypted localStorage with short expiration
 
 **Mobile Applications:**  
-**Desktop Applications:**  
+**Desktop Applications:**
+
 - Use OS-specific credential storage (Keychain, Credential Manager, Secret Service)
 
 ### 4. Making Authenticated Requests
