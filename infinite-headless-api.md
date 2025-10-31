@@ -452,7 +452,7 @@ POST /v1/headless/customers
 }
 ```
 
-#### Example Response
+#### Example Response (Success)
 
 ```json
 {
@@ -467,6 +467,36 @@ POST /v1/headless/customers
   "usedPersonaKyc": true
 }
 ```
+
+#### Example Response (NEEDS_AUTH)
+
+If the email address provided is already associated with an existing customer account, but the Bearer authentication token (public key) in the header does not match any public keys associated with that customer, the endpoint will return a `NEEDS_AUTH` status.
+
+This status indicates that:
+- A customer with this email already exists in the system
+- The current public key is not associated with this customer account
+- Email authentication is required to link the public key to the customer account
+
+```json
+{
+  "customer": {
+    "id": "9b0d801f-41ac-4269-abec-f279dc54e849",
+    "type": "INDIVIDUAL",
+    "status": "NEEDS_AUTH",
+    "countryCode": "US",
+    "createdAt": "2025-08-26T04:31:24.372423+00:00"
+  }
+}
+```
+
+**Note:** When the status is `NEEDS_AUTH`, the response does not include `kycLinkUrl` or `usedPersonaKyc` fields. To proceed, you must complete email authentication using the email authentication endpoints.
+
+**Customer Status Values:**
+
+- `ACTIVE` - Customer is active and authenticated
+- `NEEDS_AUTH` - Customer exists but current public key is not associated with this customer account (email authentication required)
+- `PENDING` - Customer creation is pending
+- `INACTIVE` - Customer account is inactive
 
 **Headless Customer Creation Benefits:**
 
@@ -746,6 +776,257 @@ const acceptedResponse = await fetch(
 );
 // Returns: { "status": "accepted", "acceptedAt": "...", ... }
 ```
+
+---
+
+## Email Authentication
+
+Email authentication allows users to associate their Edge wallet public key with an existing Infinite customer account by verifying ownership of the customer's email address. This enables users to access their customer account from multiple wallets or devices.
+
+When a customer creation request returns a `NEEDS_AUTH` status (indicating the email is already associated with a customer account that doesn't match the current public key), use these endpoints to complete the authentication process.
+
+### Initiate Email Authentication
+
+Send an email verification code to the customer's email address to begin the authentication process.
+
+```http
+POST /v1/headless/email/login
+```
+
+#### Headers
+
+- `Authorization: Bearer {jwt_token}` (required) - The JWT token obtained from wallet authentication, proving ownership of the public key
+- `X-Organization-ID: {organization_id}` (required)
+- `Content-Type: application/json` (required)
+
+**Note:** The `Authorization` header is required to authenticate the public key. The public key in the request body must match the public key used to obtain the JWT token, proving the requester controls the private key.
+
+#### Request Body
+
+- **publicKey**: `string` (required) - The Edge wallet public key to associate with the customer (must match the public key used for Bearer token authentication)
+- **customerId**: `string` (required) - The customer ID to authenticate
+
+#### Example Request
+
+```http
+POST /v1/headless/email/login
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
+Content-Type: application/json
+```
+
+```json
+{
+  "publicKey": "0x742d35Cc6634C0532925a3b844Bc9e7595f2BD6",
+  "customerId": "9b0d801f-41ac-4269-abec-f279dc54e849"
+}
+```
+
+#### Example Response
+
+```json
+{
+  "success": true,
+  "message": "Verification code sent to email"
+}
+```
+
+#### Error Responses
+
+**401 Unauthorized** - Missing or invalid Bearer token
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Missing or invalid token"
+  }
+}
+```
+
+**400 Bad Request** - Invalid customer ID or public key format, or public key mismatch
+```json
+{
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Invalid customer ID or public key, or public key does not match authenticated token"
+  }
+}
+```
+
+**404 Not Found** - Customer not found
+```json
+{
+  "error": {
+    "code": "CUSTOMER_NOT_FOUND",
+    "message": "Customer with ID not found"
+  }
+}
+```
+
+**429 Too Many Requests** - Rate limit exceeded
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many verification code requests. Please try again later."
+  }
+}
+```
+
+**Important Notes:**
+
+- Authentication via Bearer token is required to prove ownership of the public key
+- The public key in the request body must match the public key used to obtain the JWT token
+- Verification codes are sent to the email address associated with the customer account
+- Rate limiting applies to prevent abuse (typically 3 codes per hour per customer)
+- Verification codes expire after 15 minutes
+- The public key will not be associated until the verification code is successfully validated
+
+---
+
+### Verify Email Authentication Code
+
+Verify the email authentication code and associate the public key with the customer account.
+
+```http
+POST /v1/headless/email/auth
+```
+
+#### Headers
+
+- `Authorization: Bearer {jwt_token}` (required) - The JWT token obtained from wallet authentication, proving ownership of the public key
+- `X-Organization-ID: {organization_id}` (required)
+- `Content-Type: application/json` (required)
+
+**Note:** The `Authorization` header is required to authenticate the public key. The public key from the original login request (stored temporarily) will be associated with the customer account upon successful code verification, proving the requester controls the private key.
+
+#### Request Body
+
+- **customerId**: `string` (required) - The customer ID to authenticate
+- **authCode**: `string` (required) - The verification code sent to the customer's email
+
+#### Example Request
+
+```http
+POST /v1/headless/email/auth
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
+Content-Type: application/json
+```
+
+```json
+{
+  "customerId": "9b0d801f-41ac-4269-abec-f279dc54e849",
+  "authCode": "123456"
+}
+```
+
+#### Example Response (Success)
+
+```json
+{
+  "success": true,
+  "message": "Public key successfully associated with customer account"
+}
+```
+
+#### Example Response (Failure)
+
+```json
+{
+  "success": false,
+  "message": "Invalid or expired verification code"
+}
+```
+
+#### Error Responses
+
+**401 Unauthorized** - Missing or invalid Bearer token
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Missing or invalid token"
+  }
+}
+```
+
+**400 Bad Request** - Invalid verification code
+```json
+{
+  "error": {
+    "code": "INVALID_AUTH_CODE",
+    "message": "Invalid or expired verification code",
+    "details": {
+      "expiresAt": "2025-08-26T05:15:24.372423+00:00"
+    }
+  }
+}
+```
+
+**404 Not Found** - Customer not found or no pending authentication request
+```json
+{
+  "error": {
+    "code": "AUTH_REQUEST_NOT_FOUND",
+    "message": "No pending authentication request found for this customer"
+  }
+}
+```
+
+**429 Too Many Requests** - Too many failed verification attempts
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many failed verification attempts. Please request a new code."
+  }
+}
+```
+
+**Important Notes:**
+
+- The public key from the `/v1/headless/email/login` request is stored temporarily and associated with the customer account upon successful code verification
+- Multiple public keys can be associated with the same customer account
+- Adding a new public key does not remove existing associations
+- Once verified, the public key can be used to authenticate for this customer account
+- Verification codes are single-use and expire after 15 minutes
+- The response includes expiry information when authentication fails due to expired code
+- The verification code must match the customer ID from the original login request
+
+#### Response with Expiry Information
+
+When a verification code has expired, the response includes expiry information:
+
+```json
+{
+  "success": false,
+  "message": "Verification code has expired",
+  "expiresAt": "2025-08-26T05:15:24.372423+00:00",
+  "expiresAtUnix": 1756184124
+}
+```
+
+**Email Authentication Flow:**
+
+1. User authenticates via wallet (`GET /v1/auth/wallet/challenge` and `POST /v1/auth/wallet/verify`) to obtain a JWT token
+2. User attempts to create a customer via `POST /v1/headless/customers` with an email that's already associated with an existing customer account
+3. Endpoint returns `NEEDS_AUTH` status (response does not include `kycLinkUrl` or `usedPersonaKyc` fields)
+4. Application calls `POST /v1/headless/email/login` with `Authorization: Bearer {jwt_token}` header, `publicKey` (matching the authenticated public key), and `customerId` from the response
+5. System sends verification code to customer's email address
+6. User enters verification code from email
+7. Application calls `POST /v1/headless/email/auth` with `Authorization: Bearer {jwt_token}` header, `customerId`, and `authCode`
+8. System verifies code and associates the authenticated public key with customer account
+9. User can now authenticate with the new public key and access the customer account
+
+**Security Features:**
+
+- Bearer token authentication required to prove ownership of the public key
+- Time-limited verification codes (15 minutes)
+- Rate limiting on code requests
+- Single-use verification codes
+- Multiple public keys can be associated per customer
+- Public keys are additive (adding new keys doesn't remove existing ones)
 
 ---
 
@@ -1558,6 +1839,10 @@ All errors follow this structure:
 | `INSUFFICIENT_BALANCE`    | 400         | Not enough funds                                      | Check account balance                               |
 | `TRANSFER_FAILED`         | 400         | Transfer could not be processed                       | Check transfer details                              |
 | `ACCOUNT_NOT_VERIFIED`    | 400         | Bank account not verified                             | Complete account verification                       |
+| `INVALID_AUTH_CODE`       | 400         | Invalid or expired email verification code            | Request a new verification code                     |
+| `AUTH_REQUEST_NOT_FOUND`  | 404         | No pending authentication request found               | Initiate email authentication flow                 |
+| `CUSTOMER_NOT_FOUND`      | 404         | Customer with ID not found                            | Verify customer ID                                  |
+| `INVALID_REQUEST`         | 400         | Invalid request parameters                            | Check request body format and required fields       |
 
 ---
 
