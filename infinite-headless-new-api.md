@@ -425,22 +425,6 @@ X-Organization-ID: {organization_id}
 }
 ```
 
-#### Business Customer Request
-
-```json
-{
-  "type": "business",
-  "countryCode": "US",
-  "contactInformation": {
-    "email": "contact@acme.example.com"
-  },
-  "companyInformation": {
-    "legalName": "Acme Corp",
-    "website": "https://acme.example.com"
-  }
-}
-```
-
 #### Example Response
 
 ```json
@@ -457,7 +441,7 @@ X-Organization-ID: {organization_id}
 
 **Headless Customer Creation Benefits:**
 
-- Simplified schema - only requires email, name (and legal name/website for business)
+- Simplified schema - only requires email, name
 - Automatic wallet association from authentication context
 - Automatic Bridge KYC integration
 - Bridge customer created automatically via KYC link API
