@@ -260,8 +260,6 @@ Retrieve the list of countries supported for on-ramp and off-ramp operations.
 
 ```http
 GET /v1/headless/countries
-Authorization: Bearer {jwt_token}
-X-Organization-ID: {organization_id}
 ```
 
 #### Example Response
@@ -338,8 +336,6 @@ Retrieve all supported cryptocurrencies and fiat currencies with their networks 
 
 ```http
 GET /v1/headless/currencies
-Authorization: Bearer {jwt_token}
-X-Organization-ID: {organization_id}
 ```
 
 #### Example Response
@@ -396,7 +392,7 @@ X-Organization-ID: {organization_id}
 
 **Key Features:**
 
-- **Authentication required** - Must be authenticated with a wallet JWT token
+- **Authentication not required**
 - **No onboarding required** - Can be accessed before completing customer KYC
 - **Real-time limits** - Min/max amounts reflect current operational limits
 - **Network details** - Includes contract addresses and confirmation requirements
