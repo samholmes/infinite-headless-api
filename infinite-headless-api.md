@@ -1350,7 +1350,7 @@ Store your credentials securely in environment variables:
 
 ```env
 # .env file
-INFINITE_API_URL=https://api.infinite.ai
+INFINITE_API_URL=https://api.infinite.dev
 INFINITE_ORG_ID=your_organization_id
 ```
 
