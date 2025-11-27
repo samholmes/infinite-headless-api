@@ -678,8 +678,6 @@ Get real-time quotes for on-ramp (Bank → Crypto) or off-ramp (Crypto → Bank)
 
 ```http
 POST /v1/headless/quotes
-Authorization: Bearer {jwt_token}
-X-Organization-ID: {organization_id}
 ```
 
 #### Request Parameters
@@ -875,7 +873,7 @@ X-Organization-ID: {organization_id}
 #### On-Ramp Transfer Example (Bank → Crypto)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-123" \
@@ -946,7 +944,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 #### Off-Ramp Transfer Example with Developer Fee (USDC → Bank)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-456" \
@@ -1017,7 +1015,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 #### BTC Transfer Example (No Developer Fee)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-789" \
@@ -1100,7 +1098,7 @@ X-Organization-ID: {organization_id}
 #### Example Request
 
 ```bash
-curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941f-2e7efb198edd \
+curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-941f-2e7efb198edd \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}"
 ```
