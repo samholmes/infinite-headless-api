@@ -726,7 +726,7 @@ POST /v1/headless/quotes
     "amount": 990.0
   },
   "infiniteFee": 5.0,
-  "edgeFee": 5.0
+  "partnerFee": 5.0
 }
 ```
 
@@ -762,7 +762,7 @@ POST /v1/headless/quotes
     "amount": 25253.75
   },
   "infiniteFee": 0.0,
-  "edgeFee": 0.0
+  "partnerFee": 0.0
 }
 ```
 
@@ -799,7 +799,7 @@ POST /v1/headless/quotes
     "amount": 0.42
   },
   "infiniteFee": 0.0,
-  "edgeFee": 0.0
+  "partnerFee": 0.0
 }
 ```
 
@@ -826,12 +826,12 @@ POST /v1/headless/quotes
 ### Fee Structure
 
 - **infiniteFee**: Fee charged by Infinite (1% of source amount)
-- **edgeFee**: Additional fee charged by Edge (0.5% of source amount)
+- **partnerFee**: Additional fee charged by partner (0.5% of source amount)
 - **Total Fee**: 1.5%
 
 > **Important Note on Fees:**
 >
-> - **Stablecoin (USDC/USDT)**: Both quotes and transfers show 1.5% fees (1% Infinite + 0.5% Edge)
+> - **Stablecoin (USDC/USDT)**: Both quotes and transfers show 1.5% fees (1% Infinite + 0.5% partner)
 > - **Non-stablecoin (BTC/ETH)**: Both quotes and transfers show 0% fees
 > - All transfers create fee ledger entries for tracking (with 0 amounts for BTC/ETH)
 
@@ -932,7 +932,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
   },
   "fees": {
     "infiniteFee": 1.0,
-    "edgeFee": 0.5,
+    "partnerFee": 0.5,
     "total": 1.5,
     "currency": "USD"
   },
@@ -1003,7 +1003,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
   },
   "fees": {
     "infiniteFee": 0.5,
-    "edgeFee": 0.25,
+    "partnerFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
   },
@@ -1043,7 +1043,7 @@ The response for BTC/ETH transfers will show 0 fees since Bridge doesn't support
 {
   "fees": {
     "infiniteFee": 0,
-    "edgeFee": 0,
+    "partnerFee": 0,
     "total": 0,
     "currency": "BTC"
   }
@@ -1129,7 +1129,7 @@ curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-94
   },
   "fees": {
     "infiniteFee": 1.0,
-    "edgeFee": 0.5,
+    "partnerFee": 0.5,
     "total": 1.5,
     "currency": "USD"
   },
@@ -1170,7 +1170,7 @@ curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-94
   },
   "fees": {
     "infiniteFee": 0.5,
-    "edgeFee": 0.25,
+    "partnerFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
   },
