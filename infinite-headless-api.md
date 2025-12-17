@@ -552,6 +552,40 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 - `NEED_ACTIONS` - Additional information or actions required
 - `REJECTED` - KYC failed, customer cannot proceed
 
+#### Sandbox Testing using Bridge emulator
+
+In sandbox environment, KYC status automatically progresses over time using our enums, but you can supply one of these bridge to alter the process
+
+| Time Since Signup | Status | What It Means |
+|-------------------|--------|---------------|
+| 0-1 minute | `incomplete` | You just signed up, verification hasn't started |
+| 1-3 minutes | `under_review` | Your documents are being reviewed |
+| 3-5 minutes | `approved` or `rejected` | Decision made (90% get approved, 10% rejected)* |
+| 5+ minutes | `approved` | Everyone gets approved after 5 minutes |
+
+*\*The approval/rejection is deterministic based on your customer ID - you'll always get the same result for the same account.*
+
+##### Forcing a Specific KYC Status
+
+You can skip the waiting by passing a header or query parameter:
+
+**Option 1: HTTP Header**
+
+```bash
+curl -H "X-Sandbox-KYC-Status: approved" \
+     -H "Authorization: Bearer <token>" \
+     https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status
+```
+
+**Option 2: Query Parameter**
+
+```bash
+curl "https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=approved" \
+     -H "Authorization: Bearer <token>"
+```
+
+**Valid statuses bridge status to emulate:** `incomplete`, `under_review`, `approved`, `rejected`, `active`, `paused`, `offboarded`
+
 ---
 
 ## Account Management
@@ -1242,6 +1276,69 @@ The `stage` field contains the detailed state from the payment provider. Common 
 | `refunded`          | Transfer was refunded                                                                                      |
 
 > **Note**: The exact stage values depend on the payment provider and transfer type. The `status` field provides a simplified view mapped from these detailed stages.
+
+#### Sandbox Transfer Progression using Bridge emulator
+
+In sandbox environments, transfer status automatically progresses based on time:
+
+##### ONRAMP (Fiat → Crypto)
+
+*You're depositing USD to receive USDC*
+
+| Time Since Created | Status | What's Happening |
+|--------------------|--------|------------------|
+| 0-30 seconds | `awaiting_funds` | Waiting for your bank deposit |
+| 30 sec - 2 min | `payment_submitted` | Bank transfer detected |
+| 2-5 minutes | `payment_processed` | Funds cleared, converting to crypto |
+| 5+ minutes | `completed` | USDC sent to your wallet |
+
+##### OFFRAMP (Crypto → Fiat)
+
+*You're sending USDC to receive USD in your bank*
+
+| Time Since Created | Status | What's Happening |
+|--------------------|--------|------------------|
+| 0-30 seconds | `awaiting_crypto` | Waiting for your crypto deposit |
+| 30 sec - 2 min | `funds_received` | Crypto deposit confirmed |
+| 2-5 minutes | `payment_submitted` | Converting and initiating bank transfer |
+| 5-10 minutes | `payment_processed` | Bank transfer in progress |
+| 10+ minutes | `completed` | USD deposited to your bank |
+
+##### Sandbox Deposit Instructions
+
+When you create an **ONRAMP** transfer, you'll receive bank details to deposit funds:
+
+```json
+{
+  "sourceDepositInstructions": {
+    "bankName": "Bank of Nowhere",
+    "bankAccountNumber": "11223344556677",
+    "bankRoutingNumber": "123456789",
+    "currency": "USD",
+    "network": "ach"
+  }
+}
+```
+
+When you create an **OFFRAMP** transfer, you'll receive a crypto address to send funds:
+
+```json
+{
+  "sourceDepositInstructions": {
+    "toAddress": "0x...",
+    "currency": "USDC",
+    "network": "ethereum"
+  }
+}
+```
+
+##### Quick Test Flow
+
+1. **Authenticate** → Get JWT token
+2. **Check KYC** → Wait 5 min OR use `X-Sandbox-KYC-Status: approved`
+3. **Create bank account** → Link your external bank
+4. **Create ONRAMP transfer** → Get deposit instructions
+5. **Poll transfer status** → Watch it progress to `completed`
 
 ---
 
