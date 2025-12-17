@@ -584,7 +584,7 @@ curl "https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-st
      -H "Authorization: Bearer <token>"
 ```
 
-**Valid statuses bridge status to emulate:** `incomplete`, `under_review`, `approved`, `rejected`, `active`, `paused`, `offboarded`
+**Valid bridge statuses to emulate:** `incomplete`, `under_review`, `approved`, `rejected`, `active`, `paused`, `offboarded`
 
 ---
 
