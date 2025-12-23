@@ -409,6 +409,65 @@ GET /v1/headless/currencies
 
 ## Customer Onboarding
 
+### Customer Creation Flow
+
+The customer creation process handles both new and existing email addresses automatically.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. WALLET AUTH                                                     │
+│     GET  /v1/headless/auth/wallet/challenge?publicKey=<wallet>      │
+│     POST /v1/headless/auth/wallet/verify  (signed message)          │
+│     → Returns JWT token                                             │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. CREATE CUSTOMER                                                 │
+│     POST /v1/headless/customers                                     │
+│     Body: { type, countryCode, personalInfo, contactInformation }   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌──────────────────────────┐    ┌──────────────────────────────────┐
+│  NEW EMAIL               │    │  EXISTING EMAIL                  │
+│  → Customer created      │    │  → OTP sent to email             │
+│  → Wallet linked         │    │  → Response: { otpSent: true }   │
+│  → Done ✓                │    └──────────────────────────────────┘
+└──────────────────────────┘                  │
+                                              ▼
+                              ┌──────────────────────────────────────┐
+                              │  3. VERIFY OTP                       │
+                              │     POST /v1/headless/customers/     │
+                              │          verify-otp                  │
+                              │     Body: { email, code }            │
+                              │     → Wallet linked to customer      │
+                              │     → Done ✓                         │
+                              └──────────────────────────────────────┘
+```
+
+#### Email OTP Verification
+
+When a wallet attempts to create a customer with an email that already exists in the system, an OTP is sent to verify email ownership before linking the wallet.
+
+| Scenario | Result |
+|----------|--------|
+| New wallet + new email | Customer created, wallet linked automatically |
+| New wallet + existing email | OTP sent to verify email ownership |
+| Same wallet + same customer | Returns existing customer |
+| Wallet already linked to different customer | Error (400) |
+
+**OTP Details:**
+
+- **Code format**: 6-digit numeric code
+- **Expiry**: 5 minutes
+- **Rate limit**: 20 attempts per email per hour
+
+> **Important:** Email OTP is **not** for authentication—it's for linking an existing customer to a new wallet. The user must already be authenticated via wallet signature before they can verify an OTP.
+
+---
+
 ### Create Customer Profile
 
 When authenticated via wallet, you can create a customer with simplified requirements. The wallet address from authentication is automatically associated with the customer.
@@ -465,6 +524,54 @@ X-Organization-ID: {organization_id}
 - Bridge customer created automatically via KYC link API
 - Real-time KYC status from Bridge
 - Smart handling of existing customers (won't create duplicate KYC if already approved)
+
+---
+
+### Verify Email OTP
+
+When creating a customer with an existing email, verify the OTP sent to that email to link the wallet.
+
+```http
+POST /v1/headless/customers/verify-otp
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
+```
+
+#### Request Body
+
+- **email**: `string` (required) - The email address that received the OTP
+- **code**: `string` (required) - The 6-digit verification code
+
+#### Example Request
+
+```json
+{
+  "email": "alice.johnson@example.com",
+  "code": "123456"
+}
+```
+
+#### Example Response (Success)
+
+```json
+{
+  "customer": {
+    "id": "9b0d801f-41ac-4269-abec-f279dc54e849",
+    "type": "INDIVIDUAL",
+    "status": "PENDING",
+    "countryCode": "US",
+    "createdAt": "2025-08-26T04:31:24.372423+00:00"
+  }
+}
+```
+
+#### Error Responses
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | Invalid or expired verification code | OTP is incorrect or has expired (5 min) |
+| 400 | Customer not found after verification | Customer record doesn't exist |
+| 429 | Too many verification attempts | Rate limit exceeded (20/hour) |
 
 ---
 
@@ -1100,7 +1207,6 @@ Transfers can have the following status values:
 
 ### Important Notes
 
-
 1. **Idempotency**: Always provide a unique `Idempotency-Key` header to prevent duplicate transfers
 2. **Account IDs**: Use Infinite account IDs (not external provider IDs) in requests
 3. **Deposit Instructions**:
@@ -1116,6 +1222,156 @@ Transfers can have the following status values:
    - `total`: 1.5% total fee charged
    - `currency`: Currency of the fees
    - `fees` field shows 0 values for BTC/ETH transfers
+
+---
+
+### Transfer Address Scenarios
+
+This section explains the different address handling modes for ONRAMP and OFFRAMP transfers.
+
+#### ONRAMP Transfers (Fiat → Crypto)
+
+For ONRAMP transfers, the source is fiat currency, so wallet address fields like `fromAddress` and `refundAddress` do not apply.
+
+| Field | Usage |
+|-------|-------|
+| `source.accountId` | **Required** - The customer's registered bank account ID |
+| `source.currency` | **Required** - Fiat currency (e.g., `usd`) |
+| `source.network` | Payment rail (e.g., `ach`, `wire`) |
+| `destination.toAddress` | **Required** - Wallet address where crypto will be sent |
+| `destination.currency` | **Required** - Crypto currency (e.g., `usdc`) |
+| `destination.network` | Blockchain network (e.g., `ethereum`, `base`) |
+
+**Response**: Contains `sourceDepositInstructions` with bank details (account number, routing number, bank name) where the customer should deposit fiat.
+
+---
+
+#### OFFRAMP Transfers (Crypto → Fiat)
+
+OFFRAMP transfers support two modes based on whether the source wallet address is known in advance.
+
+##### Mode A: Standard OFFRAMP (with `fromAddress`)
+
+Use this mode when the customer knows which wallet address they'll send crypto from.
+
+```json
+{
+  "type": "OFFRAMP",
+  "amount": 100,
+  "source": {
+    "currency": "usdc",
+    "network": "base",
+    "fromAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+  },
+  "destination": {
+    "currency": "usd",
+    "network": "ach",
+    "accountId": "acct_bank_xyz123"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `fromAddress` | The wallet address the customer will send crypto from |
+
+**Behavior:**
+- Validates wallet ownership (must be registered to the customer)
+- Transfer expects funds specifically from this address
+- Best for EVM/account-based chains where the sender address is deterministic
+
+**Use Cases:**
+- Customer using their registered wallet
+- Mobile app with known wallet integration
+- Any scenario where the sending address is predetermined
+
+---
+
+##### Mode B: Any Address OFFRAMP (with `refundAddress`, without `fromAddress`)
+
+Use this mode when the sending address isn't known in advance. This is common for UTXO-based chains like Bitcoin where funds may come from any UTXO.
+
+```json
+{
+  "type": "OFFRAMP",
+  "amount": 100,
+  "source": {
+    "currency": "usdc",
+    "network": "base",
+    "refundAddress": "0x9876543210fedcba9876543210fedcba98765432"
+  },
+  "destination": {
+    "currency": "usd",
+    "network": "ach",
+    "accountId": "acct_bank_xyz123"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `refundAddress` | **Required** when `fromAddress` is omitted. Address where funds will be refunded if the transfer fails. |
+
+**Behavior:**
+- No wallet ownership validation (customer can send from any address)
+- Response includes a deposit address in `sourceDepositInstructions.toAddress`
+- Customer sends crypto TO this deposit address FROM any wallet
+- If transfer fails, funds are refunded to `refundAddress`
+
+**Response:**
+
+```json
+{
+  "sourceDepositInstructions": {
+    "network": "base",
+    "currency": "usdc",
+    "amount": 100,
+    "toAddress": "0x...",
+    "fromAddress": null
+  }
+}
+```
+
+**Use Cases:**
+- UTXO chains (Bitcoin) where sender address varies per transaction
+- Centralized exchanges where withdrawal address isn't controllable
+- Multi-sig wallets where the signing address may differ
+- When the customer wants flexibility in which wallet they send from
+
+---
+
+##### Invalid: Missing Both `fromAddress` and `refundAddress`
+
+OFFRAMP transfers **must** include either `fromAddress` or `refundAddress`.
+
+```json
+{
+  "type": "OFFRAMP",
+  "source": {
+    "currency": "usdc",
+    "network": "base"
+  }
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "statusCode": 400,
+  "message": "For OFFRAMP transfers without fromAddress, refundAddress is required. Please provide refundAddress in the source object for refunds if the transfer fails."
+}
+```
+
+---
+
+#### Address Decision Matrix
+
+| Scenario | `fromAddress` | `refundAddress` | Valid | Mode |
+|----------|---------------|-----------------|-------|------|
+| Known sender wallet | ✅ Provided | Optional | ✅ Yes | Standard |
+| Unknown sender (UTXO/Exchange) | Not provided | ✅ Required | ✅ Yes | Any Address |
+| Neither provided | Not provided | Not provided | ❌ No | Error |
 
 ---
 
