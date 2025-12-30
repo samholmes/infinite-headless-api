@@ -655,31 +655,34 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 
 - `PENDING` - Customer created but KYC not started
 - `IN_REVIEW` - KYC documents submitted and under review
+- `NEED_ACTIONS` - Additional information or actions required (e.g., awaiting UBO info)
 - `ACTIVE` - KYC completed successfully, customer can transact
-- `NEED_ACTIONS` - Additional information or actions required
+- `APPROVED` - KYC approved
 - `REJECTED` - KYC failed, customer cannot proceed
+- `SUSPENDED` - Customer account temporarily paused
+- `INACTIVE` - Customer has been offboarded
 
 #### Sandbox Testing using Bridge emulator
 
-In sandbox environment, KYC status automatically progresses over time using our enums, but you can supply one of these bridge to alter the process
+In sandbox environment, KYC status automatically progresses over time. The API returns our uppercase enum values, while the Bridge emulator uses lowercase status values in the background.
 
-| Time Since Signup | Status | What It Means |
-|-------------------|--------|---------------|
-| 0-1 minute | `incomplete` | You just signed up, verification hasn't started |
-| 1-3 minutes | `under_review` | Your documents are being reviewed |
-| 3-5 minutes | `approved` or `rejected` | Decision made (90% get approved, 10% rejected)* |
-| 5+ minutes | `approved` | Everyone gets approved after 5 minutes |
+| Time Since Signup | API Response | Bridge Emulated | What It Means |
+|-------------------|--------------|-----------------|---------------|
+| 0-1 minute | `PENDING` | `incomplete` | You just signed up, verification hasn't started |
+| 1-3 minutes | `IN_REVIEW` | `under_review` | Your documents are being reviewed |
+| 3-5 minutes | `ACTIVE` or `REJECTED` | `active` or `rejected` | Decision made (90% get approved, 10% rejected)* |
+| 5+ minutes | `ACTIVE` | `active` | Everyone gets approved after 5 minutes |
 
 *\*The approval/rejection is deterministic based on your customer ID - you'll always get the same result for the same account.*
 
 ##### Forcing a Specific KYC Status
 
-You can skip the waiting by passing a header or query parameter:
+You can skip the waiting by passing a header or query parameter using our API enum values:
 
 **Option 1: HTTP Header**
 
 ```bash
-curl -H "X-Sandbox-KYC-Status: approved" \
+curl -H "X-Sandbox-KYC-Status: ACTIVE" \
      -H "Authorization: Bearer <token>" \
      https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status
 ```
@@ -687,11 +690,24 @@ curl -H "X-Sandbox-KYC-Status: approved" \
 **Option 2: Query Parameter**
 
 ```bash
-curl "https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=approved" \
+curl "https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=ACTIVE" \
      -H "Authorization: Bearer <token>"
 ```
 
-**Valid bridge statuses to emulate:** `incomplete`, `under_review`, `approved`, `rejected`, `active`, `paused`, `offboarded`
+**Valid statuses:** `PENDING`, `IN_REVIEW`, `ACTIVE`, `REJECTED`
+
+**Status Mapping (API Status → Bridge Emulated):**
+
+| API Status | Bridge Emulated |
+|------------|-----------------|
+| `PENDING` | `incomplete` |
+| `IN_REVIEW` | `under_review` |
+| `NEED_ACTIONS` | `awaiting_ubo` |
+| `ACTIVE` | `active` |
+| `APPROVED` | `active` |
+| `REJECTED` | `rejected` |
+| `SUSPENDED` | `paused` |
+| `INACTIVE` | `offboarded`
 
 ---
 
@@ -1535,30 +1551,30 @@ The `stage` field contains the detailed state from the payment provider. Common 
 
 #### Sandbox Transfer Progression using Bridge emulator
 
-In sandbox environments, transfer status automatically progresses based on time:
+In sandbox environments, transfer status automatically progresses based on time. The API returns our uppercase enum values, while the Bridge emulator uses lowercase status values in the background.
 
 ##### ONRAMP (Fiat → Crypto)
 
 *You're depositing USD to receive USDC*
 
-| Time Since Created | Status | What's Happening |
-|--------------------|--------|------------------|
-| 0-30 seconds | `awaiting_funds` | Waiting for your bank deposit |
-| 30 sec - 2 min | `payment_submitted` | Bank transfer detected |
-| 2-5 minutes | `payment_processed` | Funds cleared, converting to crypto |
-| 5+ minutes | `completed` | USDC sent to your wallet |
+| Time Since Created | API Response | Bridge Emulated | What's Happening |
+|--------------------|--------------|-----------------|------------------|
+| 0-30 seconds | `AWAITING_FUNDS` | `awaiting_funds` | Waiting for your bank deposit |
+| 30 sec - 2 min | `PROCESSING` | `payment_submitted` | Bank transfer detected |
+| 2-5 minutes | `PROCESSING` | `payment_processed` | Funds cleared, converting to crypto |
+| 5+ minutes | `COMPLETED` | `completed` | USDC sent to your wallet |
 
 ##### OFFRAMP (Crypto → Fiat)
 
 *You're sending USDC to receive USD in your bank*
 
-| Time Since Created | Status | What's Happening |
-|--------------------|--------|------------------|
-| 0-30 seconds | `awaiting_crypto` | Waiting for your crypto deposit |
-| 30 sec - 2 min | `funds_received` | Crypto deposit confirmed |
-| 2-5 minutes | `payment_submitted` | Converting and initiating bank transfer |
-| 5-10 minutes | `payment_processed` | Bank transfer in progress |
-| 10+ minutes | `completed` | USD deposited to your bank |
+| Time Since Created | API Response | Bridge Emulated | What's Happening |
+|--------------------|--------------|-----------------|------------------|
+| 0-30 seconds | `AWAITING_FUNDS` | `awaiting_crypto` | Waiting for your crypto deposit |
+| 30 sec - 2 min | `PROCESSING` | `funds_received` | Crypto deposit confirmed |
+| 2-5 minutes | `PROCESSING` | `payment_submitted` | Converting and initiating bank transfer |
+| 5-10 minutes | `PROCESSING` | `payment_processed` | Bank transfer in progress |
+| 10+ minutes | `COMPLETED` | `completed` | USD deposited to your bank |
 
 ##### Sandbox Deposit Instructions
 
