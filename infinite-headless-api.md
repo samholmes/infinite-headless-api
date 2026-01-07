@@ -425,7 +425,8 @@ The customer creation process handles both new and existing email addresses auto
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. CREATE CUSTOMER                                                 │
 │     POST /v1/headless/customers                                     │
-│     Body: { type, countryCode, personalInfo, contactInformation }   │
+│     Body: { type, countryCode, personalInfo, contactInformation,    │
+│             address (optional) }                                    │
 └─────────────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┴───────────────┐
@@ -479,6 +480,16 @@ When authenticated via wallet, you can create a customer with simplified require
 - **personalInfo**: `object` (required for INDIVIDUAL)
   - `firstName`: `string` (required)
   - `lastName`: `string` (required)
+- **address**: `object` (optional) - Customer address to prefill in KYC verification
+
+| Field | Type | Required | Validation | Example |
+|-------|------|----------|------------|---------|
+| `addressLine1` | string | Yes | 1-1024 characters, non-empty | "123 Main Street" |
+| `addressLine2` | string | No | 1-1024 characters when provided | "Apt 4B" |
+| `city` | string | Yes | 1-256 characters, non-empty | "San Francisco" |
+| `state` | string | No | 1-256 characters when provided | "CA" |
+| `postalCode` | string | Yes | 1-50 characters, non-empty | "94102" |
+| `country` | string | Yes | ISO 3166-1 alpha-2 (2 chars) | "US" |
 
 ```http
 POST /v1/headless/customers
@@ -486,7 +497,7 @@ Authorization: Bearer {jwt_token}
 X-Organization-ID: {organization_id}
 ```
 
-#### Individual Customer Request
+#### Individual Customer Request (Minimal)
 
 ```json
 {
@@ -499,6 +510,49 @@ X-Organization-ID: {organization_id}
     "firstName": "Alice",
     "lastName": "Johnson"
   }
+}
+```
+
+#### Individual Customer Request (With Address)
+
+If you have the customer's address, you can include it to prefill the KYC verification form:
+
+```json
+{
+  "type": "individual",
+  "countryCode": "US",
+  "contactInformation": {
+    "email": "alice.johnson@example.com"
+  },
+  "personalInfo": {
+    "firstName": "Alice",
+    "lastName": "Johnson"
+  },
+  "address": {
+    "addressLine1": "123 Main Street",
+    "addressLine2": "Apt 4B",
+    "city": "San Francisco",
+    "state": "CA",
+    "postalCode": "94102",
+    "country": "US"
+  }
+}
+```
+
+> **Note:** When an address is provided during customer creation, it will be automatically prefilled in the KYC verification session, reducing friction for the user.
+
+**Address Validation Errors:**
+
+If the address fails validation, you'll receive a 400 error with details:
+
+```json
+{
+  "statusCode": 400,
+  "message": [
+    "address.addressLine1 must be longer than or equal to 1 characters",
+    "address.country must be a valid ISO 3166-1 alpha-2 country code"
+  ],
+  "error": "Bad Request"
 }
 ```
 
@@ -519,6 +573,7 @@ X-Organization-ID: {organization_id}
 **Headless Customer Creation Benefits:**
 
 - Simplified schema - only requires email, name
+- Optional address prefill for smoother KYC experience
 - Automatic wallet association from authentication context
 - Automatic Bridge KYC integration
 - Bridge customer created automatically via KYC link API
