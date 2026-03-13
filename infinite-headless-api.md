@@ -1139,6 +1139,13 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
     "bankRoutingNumber": "021000021",
     "bankBeneficiaryName": "Customer Bank Account",
     "bankName": "JPMorgan Chase Bank",
+    "bankAddress": {
+      "addressLine1": "383 Madison Avenue",
+      "city": "New York",
+      "state": "NY",
+      "postalCode": "10179",
+      "country": "US"
+    },
     "toAddress": null,
     "fromAddress": null
   },
@@ -1641,6 +1648,13 @@ When you create an **ONRAMP** transfer, you'll receive bank details to deposit f
     "bankName": "Bank of Nowhere",
     "bankAccountNumber": "11223344556677",
     "bankRoutingNumber": "123456789",
+    "bankAddress": {
+      "addressLine1": "123 Sandbox Street",
+      "city": "Test City",
+      "state": "TX",
+      "postalCode": "12345",
+      "country": "US"
+    },
     "currency": "USD",
     "network": "ach"
   }
@@ -1662,7 +1676,7 @@ When you create an **OFFRAMP** transfer, you'll receive a crypto address to send
 ##### Quick Test Flow
 
 1. **Authenticate** → Get JWT token
-2. **Check KYC** → Wait 5 min OR use `X-Sandbox-KYC-Status: approved`
+2. **Check KYC** → Wait 5 min OR use `X-Sandbox-KYC-Status: ACTIVE`
 3. **Create bank account** → Link your external bank
 4. **Create ONRAMP transfer** → Get deposit instructions
 5. **Poll transfer status** → Watch it progress to `completed`
