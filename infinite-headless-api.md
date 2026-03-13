@@ -425,8 +425,8 @@ The customer creation process handles both new and existing email addresses auto
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. CREATE CUSTOMER                                                 │
 │     POST /v1/headless/customers                                     │
-│     Body: { type, countryCode, personalInfo, contactInformation,    │
-│             address (optional) }                                    │
+│     Body: { type, countryCode, contactInformation,                  │
+│             individualData (optional), address (optional) }         │
 └─────────────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┴───────────────┐
@@ -473,11 +473,11 @@ When a wallet attempts to create a customer with an email that already exists in
 
 When authenticated via wallet, you can create a customer with simplified requirements. The wallet address from authentication is automatically associated with the customer.
 
-- **type**: `string` (required) - "individual" or "business"
+- **type**: `string` (required) - "INDIVIDUAL"
 - **countryCode**: `string` (required) - ISO country code (e.g., "US")
 - **contactInformation**: `object` (required)
   - `email`: `string` (required)
-- **personalInfo**: `object` (required for INDIVIDUAL)
+- **individualData**: `object` (optional) - Individual verification data to prefill KYC
   - `firstName`: `string` (required)
   - `lastName`: `string` (required)
 - **address**: `object` (optional) - Customer address to prefill in KYC verification
@@ -501,12 +501,12 @@ X-Organization-ID: {organization_id}
 
 ```json
 {
-  "type": "individual",
+  "type": "INDIVIDUAL",
   "countryCode": "US",
   "contactInformation": {
     "email": "alice.johnson@example.com"
   },
-  "personalInfo": {
+  "individualData": {
     "firstName": "Alice",
     "lastName": "Johnson"
   }
@@ -519,12 +519,12 @@ If you have the customer's address, you can include it to prefill the KYC verifi
 
 ```json
 {
-  "type": "individual",
+  "type": "INDIVIDUAL",
   "countryCode": "US",
   "contactInformation": {
     "email": "alice.johnson@example.com"
   },
-  "personalInfo": {
+  "individualData": {
     "firstName": "Alice",
     "lastName": "Johnson"
   },
@@ -938,7 +938,8 @@ POST /v1/headless/quotes
     "amount": 990.0
   },
   "infiniteFee": 5.0,
-  "partnerFee": 5.0
+  "partnerFee": 5.0,
+  "isEstimate": true
 }
 ```
 
@@ -974,7 +975,8 @@ POST /v1/headless/quotes
     "amount": 25253.75
   },
   "infiniteFee": 0.0,
-  "partnerFee": 0.0
+  "partnerFee": 0.0,
+  "isEstimate": true
 }
 ```
 
@@ -1011,7 +1013,8 @@ POST /v1/headless/quotes
     "amount": 0.42
   },
   "infiniteFee": 0.0,
-  "partnerFee": 0.0
+  "partnerFee": 0.0,
+  "isEstimate": true
 }
 ```
 
