@@ -1069,15 +1069,21 @@ Create a new transfer for on-ramp (bank → crypto) or off-ramp (crypto → bank
 #### Request Body
 
 - **type**: `string` (required) - "ONRAMP" or "OFFRAMP"
-- **amount**: `number` (required) - Transfer amount
+- **amount**: `number` (required) - Transfer amount in display units (e.g., 100 for $100)
 - **source**: `object` (required)
-  - For on-ramp: `currency`, `network`, `accountId` (Infinite account ID)
-  - For off-ramp: `currency`, `network`, `fromAddress` (wallet address)
+  - For on-ramp: `currency` (fiat currency, e.g., "USD")
+  - For off-ramp: `currency`, `network`, `fromAddress` or `refundAddress`
 - **destination**: `object` (required)
-  - For on-ramp: `currency`, `network`, `toAddress` (wallet address)
-  - For off-ramp: `currency`, `network`, `accountId` (Infinite account ID)
+  - For on-ramp: `currency`, `toAddress` (wallet address)
+  - For off-ramp: `currency`, `accountId` (bank account ID)
 - **clientReferenceId**: `string` (optional) - Your reference ID
-- **developerFeePercent**: `string` (optional) - Developer fee percentage (0.0-100.0) - Only supported for stablecoin transfers (USDC/USDT)
+- **paymentReason**: `string` (optional) - Payment reason code
+
+> **Fees**: The headless API calculates fees automatically based on the currency pair:
+> - **Stablecoin transfers (USDC/USDT)**: 1.5% total (1% Infinite + 0.5% partner)
+> - **Non-stablecoin transfers (BTC/ETH)**: 0%
+>
+> `developerFeePercent` cannot be overridden in headless transfers.
 
 ```http
 POST /v1/headless/transfers
@@ -1097,19 +1103,17 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
     "type": "ONRAMP",
     "amount": 100.0,
     "source": {
-      "currency": "usd",
-      "network": "wire",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD"
     },
     "destination": {
-      "currency": "usdc",
-      "network": "ethereum",
+      "currency": "USDC",
       "toAddress": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
     },
-    "clientReferenceId": "my-onramp-001",
-    "developerFeePercent": "1.5"
+    "clientReferenceId": "my-onramp-001"
   }'
 ```
+
+> **Note:** For ONRAMP transfers, `source.accountId` is not required - the API provides deposit instructions (bank account details) where the customer should send fiat. The `source.network` defaults to "ach" for USD.
 
 #### On-Ramp Transfer Response
 
@@ -1149,6 +1153,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
       "postalCode": "10179",
       "country": "US"
     },
+    "bankAddressLine": null,
     "toAddress": null,
     "fromAddress": null
   },
@@ -1163,7 +1168,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
 }
 ```
 
-#### Off-Ramp Transfer Example with Developer Fee (USDC → Bank)
+#### Off-Ramp Transfer Example (USDC → Bank)
 
 ```bash
 curl -X POST https://api.infinite.dev/v1/headless/transfers \
@@ -1175,17 +1180,15 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
     "type": "OFFRAMP",
     "amount": 50.0,
     "source": {
-      "currency": "usdc",
+      "currency": "USDC",
       "network": "ethereum",
       "fromAddress": "0x7E40e22EF038FD3017F5D1F5974a73eD41e13064"
     },
     "destination": {
-      "currency": "usd",
-      "network": "ach",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD",
+      "accountId": "eba_abc123def456"
     },
-    "clientReferenceId": "my-offramp-001",
-    "developerFeePercent": "1.5"
+    "clientReferenceId": "my-offramp-001"
   }'
 ```
 
@@ -1234,7 +1237,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
 }
 ```
 
-#### BTC Transfer Example (No Developer Fee)
+#### BTC Transfer Example (0% Fee)
 
 ```bash
 curl -X POST https://api.infinite.dev/v1/headless/transfers \
@@ -1246,12 +1249,10 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
     "type": "ONRAMP",
     "amount": 100.0,
     "source": {
-      "currency": "usd",
-      "network": "wire",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD"
     },
     "destination": {
-      "currency": "btc",
+      "currency": "BTC",
       "network": "bitcoin",
       "toAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
     },
@@ -1259,7 +1260,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
   }'
 ```
 
-The response for BTC/ETH transfers will show 0 fees since Bridge doesn't support developer fees for these assets:
+The response for BTC/ETH transfers will show 0 fees (no fee for non-stablecoin transfers):
 
 ```json
 {
@@ -1271,8 +1272,6 @@ The response for BTC/ETH transfers will show 0 fees since Bridge doesn't support
   }
 }
 ```
-
-> **Note**: Developer fees are not supported for BTC/ETH transfers. The `developerFeePercent` field should be omitted for these transfers.
 
 ### Transfer Status Values
 
@@ -1295,14 +1294,18 @@ Transfers can have the following status values:
    - For OFFRAMP: Send crypto to the address in `sourceDepositInstructions.toAddress`
 4. **Networks**: Specify the exact payment network (e.g., "wire", "ach", "ethereum")
 5. **Currencies**: Use lowercase currency codes (e.g., "usd", "usdc")
-6. **Developer Fees**:
-   - Only supported for stablecoin transfers (USDC/USDT)
-   - Not supported for BTC/ETH transfers
-   - Expressed as a percentage (e.g., "1.5" for 1.5%)
+6. **Fees** (automatic in headless API):
+   - 1.5% for stablecoin transfers (USDC/USDT)
+   - 0% for non-stablecoin transfers (BTC/ETH)
+   - Fees are calculated automatically - cannot be overridden
 7. **Fee Response Structure**:
    - `total`: 1.5% total fee charged
    - `currency`: Currency of the fees
    - `fees` field shows 0 values for BTC/ETH transfers
+8. **Bank Address Fields** (for ONRAMP transfers):
+   - `bankAddress`: Structured object with `addressLine1`, `city`, `state`, `postalCode`, `country`
+   - `bankAddressLine`: Single-line string address (fallback when structured not available)
+   - Check both fields - the API returns whichever format the payment provider supplies
 
 ---
 
@@ -1316,14 +1319,15 @@ For ONRAMP transfers, the source is fiat currency, so wallet address fields like
 
 | Field | Usage |
 |-------|-------|
-| `source.accountId` | **Required** - The customer's registered bank account ID |
-| `source.currency` | **Required** - Fiat currency (e.g., `usd`) |
-| `source.network` | Payment rail (e.g., `ach`, `wire`) |
+| `source.currency` | **Required** - Fiat currency (e.g., `USD`) |
+| `source.network` | Optional - Payment rail (defaults to `ach` for USD) |
 | `destination.toAddress` | **Required** - Wallet address where crypto will be sent |
-| `destination.currency` | **Required** - Crypto currency (e.g., `usdc`) |
-| `destination.network` | Blockchain network (e.g., `ethereum`, `base`) |
+| `destination.currency` | **Required** - Crypto currency (e.g., `USDC`) |
+| `destination.network` | Optional - Blockchain network (defaults based on currency) |
 
-**Response**: Contains `sourceDepositInstructions` with bank details (account number, routing number, bank name) where the customer should deposit fiat.
+> **Note:** `source.accountId` is **not required** for ONRAMP - the API resolves the deposit destination automatically and returns bank details in `sourceDepositInstructions`.
+
+**Response**: Contains `sourceDepositInstructions` with bank details (account number, routing number, bank name, bank address) where the customer should deposit fiat.
 
 ---
 
@@ -1482,21 +1486,27 @@ curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-94
   "type": "ONRAMP",
   "status": "PROCESSING",
   "stage": "payment_received",
-  "amount": "100.00",
+  "amount": 100,
   "currency": "USD",
   "source": {
     "type": "bank_account",
-    "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03",
-    "address": null,
-    "currency": "usd",
-    "network": "wire"
+    "accountId": null,
+    "currency": "USD"
   },
   "destination": {
     "type": "wallet",
-    "accountId": null,
-    "address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-    "currency": "usdc",
-    "network": "ethereum"
+    "accountId": "ewa_g4zdtec5biocpb2h9i7j",
+    "currency": "USDC"
+  },
+  "sourceDepositInstructions": {
+    "network": "ach_push",
+    "currency": "USD",
+    "amount": 100,
+    "bankAccountNumber": "11223344556677",
+    "bankRoutingNumber": "123456789",
+    "bankBeneficiaryName": "Bridge Ventures Inc",
+    "bankName": "Bank of Nowhere",
+    "bankAddressLine": "1800 North Pole St., Orlando, FL 32801"
   },
   "fees": {
     "infiniteFee": 1.0,
@@ -1504,14 +1514,8 @@ curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-94
     "total": 1.5,
     "currency": "USD"
   },
-  "expectedCompletionTime": null,
-  "transactionHash": null,
   "createdAt": "2025-01-09T23:18:45.123Z",
-  "updatedAt": "2025-01-09T23:25:10.456Z",
-  "metadata": {
-    "bridgeTransferId": "br_transfer_1234567890",
-    "clientReferenceId": "my-onramp-001"
-  }
+  "updatedAt": "2025-01-09T23:25:10.456Z"
 }
 ```
 
@@ -1651,17 +1655,20 @@ When you create an **ONRAMP** transfer, you'll receive bank details to deposit f
     "bankName": "Bank of Nowhere",
     "bankAccountNumber": "11223344556677",
     "bankRoutingNumber": "123456789",
-    "bankAddress": {
-      "addressLine1": "123 Sandbox Street",
-      "city": "Test City",
-      "state": "TX",
-      "postalCode": "12345",
-      "country": "US"
-    },
+    "bankBeneficiaryName": "Bridge Ventures Inc",
+    "bankAddress": null,
+    "bankAddressLine": "1800 North Pole St., Orlando, FL 32801",
     "currency": "USD",
-    "network": "ach"
+    "network": "ach_push"
   }
 }
+```
+
+> **Note on Bank Address Fields:**
+> - `bankAddress`: Structured address object with `addressLine1`, `city`, `state`, `postalCode`, `country` (when available)
+> - `bankAddressLine`: Single-line address string (when structured address is not available)
+>
+> The API returns whichever format is available from the payment provider. In sandbox (using Bridge emulator), you'll typically receive `bankAddressLine` as a single string. Check both fields when displaying bank address to users.
 ```
 
 When you create an **OFFRAMP** transfer, you'll receive a crypto address to send funds:
