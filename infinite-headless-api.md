@@ -1292,8 +1292,10 @@ Transfers can have the following status values:
 3. **Deposit Instructions**:
    - For ONRAMP: Follow the wire transfer instructions in `sourceDepositInstructions`
    - For OFFRAMP: Send crypto to the address in `sourceDepositInstructions.toAddress`
-4. **Networks**: Specify the exact payment network (e.g., "wire", "ach", "ethereum")
-5. **Currencies**: Use lowercase currency codes (e.g., "usd", "usdc")
+4. **Networks**: Network values are case-insensitive. Supported networks:
+   - **Fiat (ONRAMP source / OFFRAMP destination)**: USD→ACH/WIRE, EUR→SEPA, MXN→SPEI
+   - **Crypto (ONRAMP destination / OFFRAMP source)**: USDC/USDT→ETHEREUM/POLYGON/SOLANA, BTC→BITCOIN, ETH→ETHEREUM
+5. **Currencies**: Currency codes (e.g., "usd", "usdc")
 6. **Fees** (automatic in headless API):
    - 1.5% for stablecoin transfers (USDC/USDT)
    - 0% for non-stablecoin transfers (BTC/ETH)
