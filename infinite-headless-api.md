@@ -1141,7 +1141,7 @@ curl -X POST https://api.infinite.dev/v1/headless/transfers \
     "network": "wire",
     "currency": "usd",
     "amount": 100.0,
-    "depositMessage": "Your reference code is 7fa4fb35-59d7-42c9-b0aa-66a4f5b34cf3. Please include this code in your wire transfer.",
+    "depositMessage": "BRGJFJHX3TCUWGFH3W6J",
     "bankAccountNumber": "8312008517",
     "bankRoutingNumber": "021000021",
     "bankBeneficiaryName": "Customer Bank Account",
