@@ -22,8 +22,8 @@ To integrate the Headless SDK, you'll need:
 
 - **Organization ID**: Provided during onboarding
 - **API Endpoints**:
-  - Production: `https://headless.infinite.dev`
-  - Sandbox: `https://sandbox.headless.infinite.dev`
+  - Production: `https://api.infinite.dev`
+  - Sandbox: `https://sandbox.api.infinite.dev`
 
 ### Organization Requirements
 
@@ -33,7 +33,7 @@ For wallet authentication to work, your organization must:
 - **Have Wallet Auth Enabled**: The `WalletAuthEnabled` flag must be set to true
 - **Be Valid**: Organization ID must exist in the system
 
-> **Note:** Both `/auth/wallet/challenge` and `/auth/wallet/verify` endpoints validate these requirements. If your organization doesn't meet these criteria, authentication will fail with appropriate error messages.
+> **Note:** Both `/v1/headless/auth/wallet/challenge` and `/v1/headless/auth/wallet/verify` endpoints validate these requirements. If your organization doesn't meet these criteria, authentication will fail with appropriate error messages.
 
 ### Required Headers
 
@@ -73,14 +73,14 @@ Initiates the authentication process by requesting a unique challenge nonce.
 - **publicKey**: `string` (required)
 
 ```http
-GET /v1/auth/wallet/challenge?publicKey={public_key}
+GET /v1/headless/auth/wallet/challenge?publicKey={public_key}
 X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
 
 ```http
-GET /v1/auth/wallet/challenge?publicKey=0x742d35Cc6634C0532925a3b844Bc9e7595f2BD6
+GET /v1/headless/auth/wallet/challenge?publicKey=0x742d35Cc6634C0532925a3b844Bc9e7595f2BD6
 X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```
 
@@ -110,7 +110,7 @@ Verifies the signed message and returns a JWT token for authenticated requests.
 - **message**: `string`
 
 ```http
-POST /v1/auth/wallet/verify
+POST /v1/headless/auth/wallet/verify
 X-Organization-ID: {organization_id}
 ```
 
@@ -174,7 +174,9 @@ Timestamp: {timestamp}
 View all active authentication sessions for the current user.
 
 ```http
-GET /auth/wallet/sessions
+GET /v1/headless/auth/wallet/sessions
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 **Example Response:**
@@ -203,10 +205,13 @@ GET /auth/wallet/sessions
 End authentication sessions with flexible options.
 
 ```http
-POST /auth/wallet/logout
+POST /v1/headless/auth/wallet/logout
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
-- **session_id**: `string`
+- **session_id**: `string` (optional) - Specific session ID to logout
+- **logout_all**: `boolean` (optional) - If true, logs out all sessions
 
 #### Examples
 
@@ -387,7 +392,7 @@ GET /v1/headless/currencies
 
 **Key Features:**
 
-- **Authentication required** - Must be authenticated with a wallet JWT token
+- **Authentication not required**
 - **No onboarding required** - Can be accessed before completing customer KYC
 - **Real-time limits** - Min/max amounts reflect current operational limits
 - **Network details** - Includes contract addresses and confirmation requirements
@@ -404,51 +409,150 @@ GET /v1/headless/currencies
 
 ## Customer Onboarding
 
+### Customer Creation Flow
+
+The customer creation process handles both new and existing email addresses automatically.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. WALLET AUTH                                                     │
+│     GET  /v1/headless/auth/wallet/challenge?publicKey=<wallet>      │
+│     POST /v1/headless/auth/wallet/verify  (signed message)          │
+│     → Returns JWT token                                             │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. CREATE CUSTOMER                                                 │
+│     POST /v1/headless/customers                                     │
+│     Body: { type, countryCode, contactInformation,                  │
+│             individualData (optional), address (optional) }         │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌──────────────────────────┐    ┌──────────────────────────────────┐
+│  NEW EMAIL               │    │  EXISTING EMAIL                  │
+│  → Customer created      │    │  → OTP sent to email             │
+│  → Wallet linked         │    │  → Response: { otpSent: true }   │
+│  → Done ✓                │    └──────────────────────────────────┘
+└──────────────────────────┘                  │
+                                              ▼
+                              ┌──────────────────────────────────────┐
+                              │  3. VERIFY OTP                       │
+                              │     POST /v1/headless/customers/     │
+                              │          verify-otp                  │
+                              │     Body: { email, code }            │
+                              │     → Wallet linked to customer      │
+                              │     → Done ✓                         │
+                              └──────────────────────────────────────┘
+```
+
+#### Email OTP Verification
+
+When a wallet attempts to create a customer with an email that already exists in the system, an OTP is sent to verify email ownership before linking the wallet.
+
+| Scenario | Result |
+|----------|--------|
+| New wallet + new email | Customer created, wallet linked automatically |
+| New wallet + existing email | OTP sent to verify email ownership |
+| Same wallet + same customer | Returns existing customer |
+| Wallet already linked to different customer | Error (400) |
+
+**OTP Details:**
+
+- **Code format**: 6-digit numeric code
+- **Expiry**: 5 minutes
+- **Rate limit**: 20 attempts per email per hour
+
+> **Important:** Email OTP is **not** for authentication—it's for linking an existing customer to a new wallet. The user must already be authenticated via wallet signature before they can verify an OTP.
+
+---
+
 ### Create Customer Profile
 
 When authenticated via wallet, you can create a customer with simplified requirements. The wallet address from authentication is automatically associated with the customer.
 
-- **type**: `string` (required) - "individual" or "business"
+- **type**: `string` (required) - "INDIVIDUAL"
 - **countryCode**: `string` (required) - ISO country code (e.g., "US")
-- **data**: `object` (required) - Customer data based on type
+- **contactInformation**: `object` (required)
+  - `email`: `string` (required)
+- **individualData**: `object` (optional) - Individual verification data to prefill KYC
+  - `firstName`: `string` (required)
+  - `lastName`: `string` (required)
+- **address**: `object` (optional) - Customer address to prefill in KYC verification
+
+| Field | Type | Required | Validation | Example |
+|-------|------|----------|------------|---------|
+| `addressLine1` | string | Yes | 1-1024 characters, non-empty | "123 Main Street" |
+| `addressLine2` | string | No | 1-1024 characters when provided | "Apt 4B" |
+| `city` | string | Yes | 1-256 characters, non-empty | "San Francisco" |
+| `state` | string | No | 1-256 characters when provided | "CA" |
+| `postalCode` | string | Yes | 1-50 characters, non-empty | "94102" |
+| `country` | string | Yes | ISO 3166-1 alpha-2 (2 chars) | "US" |
 
 ```http
 POST /v1/headless/customers
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
-#### Individual Customer Request
+#### Individual Customer Request (Minimal)
 
 ```json
 {
-  "type": "individual",
+  "type": "INDIVIDUAL",
   "countryCode": "US",
-  "data": {
-    "personalInfo": {
-      "firstName": "Alice",
-      "lastName": "Johnson"
-    },
-    "contactInformation": {
-      "email": "alice.johnson@example.com"
-    }
+  "contactInformation": {
+    "email": "alice.johnson@example.com"
+  },
+  "individualData": {
+    "firstName": "Alice",
+    "lastName": "Johnson"
   }
 }
 ```
 
-#### Business Customer Request
+#### Individual Customer Request (With Address)
+
+If you have the customer's address, you can include it to prefill the KYC verification form:
 
 ```json
 {
-  "type": "business",
+  "type": "INDIVIDUAL",
   "countryCode": "US",
-  "data": {
-    "companyInformation": {
-      "legalName": "Acme Corp",
-      "website": "https://acme.example.com"
-    },
-    "contactInformation": {
-      "email": "contact@acme.example.com"
-    }
+  "contactInformation": {
+    "email": "alice.johnson@example.com"
+  },
+  "individualData": {
+    "firstName": "Alice",
+    "lastName": "Johnson"
+  },
+  "address": {
+    "addressLine1": "123 Main Street",
+    "addressLine2": "Apt 4B",
+    "city": "San Francisco",
+    "state": "CA",
+    "postalCode": "94102",
+    "country": "US"
   }
+}
+```
+
+> **Note:** When an address is provided during customer creation, it will be automatically prefilled in the KYC verification session, reducing friction for the user.
+
+**Address Validation Errors:**
+
+If the address fails validation, you'll receive a 400 error with details:
+
+```json
+{
+  "statusCode": 400,
+  "message": [
+    "address.addressLine1 must be longer than or equal to 1 characters",
+    "address.country must be a valid ISO 3166-1 alpha-2 country code"
+  ],
+  "error": "Bad Request"
 }
 ```
 
@@ -459,41 +563,91 @@ POST /v1/headless/customers
   "customer": {
     "id": "9b0d801f-41ac-4269-abec-f279dc54e849",
     "type": "INDIVIDUAL",
-    "status": "ACTIVE",
+    "status": "PENDING",
     "countryCode": "US",
     "createdAt": "2025-08-26T04:31:24.372423+00:00"
-  },
-  "kycLinkUrl": "http://localhost:5223/v1/kyc?session=1d18081c-639b-40e1-90c2-8f5e0ec7b3ef&callback=edge%3A%2F%2Fkyc-complete",
-  "usedPersonaKyc": true
+  }
 }
 ```
 
 **Headless Customer Creation Benefits:**
 
-- Simplified schema - only requires email, name (and legal name/website for business)
+- Simplified schema - only requires email, name
+- Optional address prefill for smoother KYC experience
 - Automatic wallet association from authentication context
 - Automatic Bridge KYC integration
 - Bridge customer created automatically via KYC link API
 - Real-time KYC status from Bridge
 - Smart handling of existing customers (won't create duplicate KYC if already approved)
-- TOS links available immediately after creation (can be accessed in parallel with KYC)
+
+---
+
+### Verify Email OTP
+
+When creating a customer with an existing email, verify the OTP sent to that email to link the wallet.
+
+```http
+POST /v1/headless/customers/verify-otp
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
+```
+
+#### Request Body
+
+- **email**: `string` (required) - The email address that received the OTP
+- **code**: `string` (required) - The 6-digit verification code
+
+#### Example Request
+
+```json
+{
+  "email": "alice.johnson@example.com",
+  "code": "123456"
+}
+```
+
+#### Example Response (Success)
+
+```json
+{
+  "customer": {
+    "id": "9b0d801f-41ac-4269-abec-f279dc54e849",
+    "type": "INDIVIDUAL",
+    "status": "PENDING",
+    "countryCode": "US",
+    "createdAt": "2025-08-26T04:31:24.372423+00:00"
+  }
+}
+```
+
+#### Error Responses
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | Invalid or expired verification code | OTP is incorrect or has expired (5 min) |
+| 400 | Customer not found after verification | Customer record doesn't exist |
+| 429 | Too many verification attempts | Rate limit exceeded (20/hour) |
 
 ---
 
 ### Get KYC Link
 
-Retrieve a KYC verification link for a customer.
+Retrieve a KYC verification link for a customer, which also accepts TOS for bridge as part of the Infinite KYC flow.
 
 - **redirectUrl**: `string` (required)
 
 ```http
-GET /customers/{customerId}/kyc-link?redirectUrl={url}
+GET /v1/headless/customers/{customerId}/kyc-link?redirectUrl={url}
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
 
 ```http
-GET /customers/12345678-1234-1234-1234-123456789012/kyc-link?redirectUrl=https://app.example.com/kyc-complete
+GET /v1/headless/customers/12345678-1234-1234-1234-123456789012/kyc-link?redirectUrl=https://app.example.com/kyc-complete
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```
 
 #### Example Response
@@ -514,7 +668,7 @@ GET /customers/12345678-1234-1234-1234-123456789012/kyc-link?redirectUrl=https:/
 **KYC Flow:**
 
 1. Customer is created with basic information
-2. Get KYC link with redirect URL - returns an Infinite-owned URL that redirects to Bridge/Persona
+2. Get KYC link with redirect URL - returns an Infinite-owned URL that redirects to Infinite KYC flow
 3. Customer completes KYC at the provided URL
 4. Customer is redirected back to your application
 5. KYC status is automatically updated in the system
@@ -529,6 +683,8 @@ Check current KYC verification status for a customer. This endpoint retrieves re
 
 ```http
 GET /v1/headless/customers/{customerId}/kyc-status
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
@@ -544,208 +700,69 @@ X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
 ```json
 {
   "customerId": "9b0d801f-41ac-4269-abec-f279dc54e849",
-  "kycStatus": "approved",
+  "kycStatus": "ACTIVE",
+  "sessionStatus": "COMPLETED",
   "kycCompletedAt": "2025-08-26T04:32:31.607Z"
 }
 ```
 
-**KYC Status Values (from Bridge):**
+**KYC Status Values:**
 
-- `not_started` - KYC link created but not accessed
-- `incomplete` - User started but didn't complete KYC
-- `awaiting_ubo` - Waiting for Ultimate Beneficial Owner information (business only)
-- `under_review` - Documents submitted and under review
-- `approved` - KYC completed successfully, customer can transact
-- `rejected` - KYC failed, customer cannot proceed
-- `paused` - KYC temporarily paused
-- `offboarded` - Customer has been offboarded
+- `PENDING` - Customer created but KYC not started
+- `IN_REVIEW` - KYC documents submitted and under review
+- `NEED_ACTIONS` - Additional information or actions required (e.g., awaiting UBO info)
+- `ACTIVE` - KYC completed successfully, customer can transact
+- `APPROVED` - KYC approved
+- `REJECTED` - KYC failed, customer cannot proceed
+- `SUSPENDED` - Customer account temporarily paused
+- `INACTIVE` - Customer has been offboarded
 
-#### Sandbox Testing
+#### Sandbox Testing using Bridge emulator
 
-In sandbox environments, you can test different KYC states without waiting for actual processing:
+In sandbox environment, KYC status automatically progresses over time. The API returns our uppercase enum values, while the Bridge emulator uses lowercase status values in the background.
 
-##### 1. Time-Based Progression (Default)
+| Time Since Signup | API Response | Bridge Emulated | What It Means |
+|-------------------|--------------|-----------------|---------------|
+| 0-1 minute | `PENDING` | `incomplete` | You just signed up, verification hasn't started |
+| 1-3 minutes | `IN_REVIEW` | `under_review` | Your documents are being reviewed |
+| 3-5 minutes | `ACTIVE` or `REJECTED` | `active` or `rejected` | Decision made (90% get approved, 10% rejected)* |
+| 5+ minutes | `ACTIVE` | `active` | Everyone gets approved after 5 minutes |
 
-The sandbox automatically progresses through KYC states based on time elapsed since customer creation:
+*\*The approval/rejection is deterministic based on your customer ID - you'll always get the same result for the same account.*
 
-- **0-1 minutes**: `incomplete`
-- **1-3 minutes**: `under_review`
-- **3-5 minutes**: `approved` (90% chance) or `rejected` (10% chance)
-- **5+ minutes**: `approved`
+##### Forcing a Specific KYC Status
 
-##### 2. Explicit Status Override
+You can skip the waiting by passing a header or query parameter using our API enum values:
 
-Force a specific KYC status using headers or query parameters:
+**Option 1: HTTP Header**
 
-```http
-# Using header
-GET /v1/headless/customers/{customerId}/kyc-status
-X-Sandbox-KYC-Status: under_review
-
-# Using query parameter
-GET /v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=rejected
+```bash
+curl -H "X-Sandbox-KYC-Status: ACTIVE" \
+     -H "Authorization: Bearer <token>" \
+     https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status
 ```
 
-##### 3. Persona Test Mode
+**Option 2: Query Parameter**
 
-Control the outcome at the 3-5 minute mark (simulating Persona's sandbox test mode):
-
-```http
-# Force approval
-X-Sandbox-Persona-Test-Mode: approved
-
-# Force rejection
-X-Sandbox-Persona-Test-Mode: rejected
+```bash
+curl "https://sandbox.api.infinite.dev/v1/headless/customers/{customerId}/kyc-status?sandbox_kyc_status=ACTIVE" \
+     -H "Authorization: Bearer <token>"
 ```
 
-**Example: Testing Rejection Flow**
+**Valid statuses:** `PENDING`, `IN_REVIEW`, `ACTIVE`, `REJECTED`
 
-```javascript
-// Wait 3 minutes after customer creation, then force rejection
-const response = await fetch(
-  `${API_URL}/v1/headless/customers/${customerId}/kyc-status`,
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Organization-ID": orgId,
-      "X-Sandbox-Persona-Test-Mode": "rejected",
-    },
-  }
-);
-// Response: { "kycStatus": "rejected", ... }
-```
+**Status Mapping (API Status → Bridge Emulated):**
 
----
-
-### Terms of Service (TOS)
-
-Customers can access and accept Bridge's Terms of Service immediately after account creation, even before KYC approval.
-
-#### Get TOS Link
-
-Retrieve the Terms of Service acceptance link and status for a customer.
-
-```http
-GET /v1/headless/customers/{customerId}/tos
-```
-
-##### Headers
-
-- `Authorization: Bearer {jwt_token}` (required)
-- `X-Organization-ID: {organizationId}` (required)
-
-##### Example Request
-
-```http
-GET /v1/headless/customers/9b0d801f-41ac-4269-abec-f279dc54e849/tos
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-X-Organization-ID: 9a9cbc74-7fed-49c3-8042-7b816a3e1a48
-```
-
-##### Example Response (TOS Pending)
-
-```json
-{
-  "tosUrl": "https://headless.infinite.dev/v1/headless/tos?session=7f8a9b1c-2d3e-4f5a-6b7c-8d9e0f1a2b3c&customerId=9b0d801f-41ac-4269-abec-f279dc54e849",
-  "status": "pending",
-  "acceptedAt": null,
-  "customerName": "Alice Johnson",
-  "email": "alice@example.com"
-}
-```
-
-##### Example Response (TOS Accepted)
-
-```json
-{
-  "tosUrl": "",
-  "status": "accepted",
-  "acceptedAt": "2025-08-26T17:15:22.123456Z",
-  "customerName": "Alice Johnson",
-  "email": "alice@example.com"
-}
-```
-
-##### Example Response (Not Required)
-
-```json
-{
-  "tosUrl": "",
-  "status": "not_required",
-  "acceptedAt": null,
-  "customerName": "Alice Johnson",
-  "email": "alice@example.com"
-}
-```
-
-**TOS Flow:**
-
-1. Customer is created via headless SDK
-2. Call GET `/v1/headless/customers/{customerId}/tos` to get TOS link (available immediately)
-3. If status is "pending", redirect customer to the `tosUrl`
-4. Customer accepts TOS on Bridge's platform (can be done in parallel with KYC)
-5. Bridge sends webhook to update TOS status
-6. Once both KYC and TOS are complete, customer can perform transactions
-
-**Key Features:**
-
-- Available immediately after customer creation (no need to wait for KYC approval)
-- Returns Infinite-owned URL that redirects to Bridge
-- Session-based with 24-hour expiration
-- Automatic status tracking via Bridge webhooks
-- No need to store TOS acceptance locally
-- Can be completed in parallel with KYC for better user experience
-
-**TOS Status Values:**
-
-- `pending` - TOS needs to be accepted
-- `accepted` - TOS has been accepted
-- `not_required` - TOS not required for this customer
-
-#### Sandbox Testing
-
-In sandbox environments, you can test different TOS states:
-
-##### Force TOS Status
-
-Use headers or query parameters to control TOS status:
-
-```http
-# Using header
-GET /v1/headless/customers/{customerId}/tos
-X-Sandbox-TOS-Status: accepted
-
-# Using query parameter
-GET /v1/headless/customers/{customerId}/tos?sandbox_tos_status=pending
-```
-
-**Example: Testing TOS Acceptance Flow**
-
-```javascript
-// Test pending TOS
-const pendingResponse = await fetch(
-  `${API_URL}/v1/headless/customers/${customerId}/tos?sandbox_tos_status=pending`,
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Organization-ID": orgId,
-    },
-  }
-);
-// Returns: { "status": "pending", "tosUrl": "...", ... }
-
-// Test accepted TOS
-const acceptedResponse = await fetch(
-  `${API_URL}/v1/headless/customers/${customerId}/tos?sandbox_tos_status=accepted`,
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Organization-ID": orgId,
-    },
-  }
-);
-// Returns: { "status": "accepted", "acceptedAt": "...", ... }
-```
+| API Status | Bridge Emulated |
+|------------|-----------------|
+| `PENDING` | `incomplete` |
+| `IN_REVIEW` | `under_review` |
+| `NEED_ACTIONS` | `awaiting_ubo` |
+| `ACTIVE` | `active` |
+| `APPROVED` | `active` |
+| `REJECTED` | `rejected` |
+| `SUSPENDED` | `paused` |
+| `INACTIVE` | `offboarded`
 
 ---
 
@@ -764,6 +781,8 @@ Link a bank account for fiat payments (ACH transfers).
 
 ```http
 POST /v1/headless/accounts
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### Example Request
@@ -807,7 +826,7 @@ X-Organization-ID: {organization_id}
 #### Example Request
 
 ```bash
-curl -X GET https://api.infinite.ai/v1/headless/customers/cust_abc123def456ghi789/accounts \
+curl -X GET https://api.infinite.dev/v1/headless/customers/cust_abc123def456ghi789/accounts \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}"
 ```
@@ -829,28 +848,12 @@ curl -X GET https://api.infinite.ai/v1/headless/customers/cust_abc123def456ghi78
       "holderName": "Alice Johnson",
       "createdAt": "2025-01-09T20:15:30.123Z",
       "metadata": {
-        "bridgeAccountId": "ext_acct_1234567890",
+        "externalAccountId": "ext_acct_1234567890",
         "verificationStatus": "verified"
-      }
-    },
-    {
-      "id": "acct_bank_8b2c1d3e4f5a6b7c8d9e0f1a",
-      "type": "EXTERNAL_BANK_ACCOUNT",
-      "status": "PENDING",
-      "currency": "USD",
-      "bankName": "Bank of America",
-      "accountNumber": "****5678",
-      "routingNumber": "****0111",
-      "accountType": "savings",
-      "holderName": "Alice Johnson",
-      "createdAt": "2025-01-10T10:30:45.456Z",
-      "metadata": {
-        "bridgeAccountId": "ext_acct_0987654321",
-        "verificationStatus": "pending"
       }
     }
   ],
-  "totalCount": 2
+  "totalCount": 1
 }
 ```
 
@@ -858,9 +861,9 @@ curl -X GET https://api.infinite.ai/v1/headless/customers/cust_abc123def456ghi78
 
 - **accounts**: Array of account objects
   - **id**: Unique identifier for the account (use this in transfer requests)
-  - **type**: Account type (e.g., "EXTERNAL_BANK_ACCOUNT", "EXTERNAL_WALLET_ACCOUNT")
+  - **type**: Account type (e.g., "EXTERNAL_BANK_ACCOUNT")
   - **status**: Account status ("ACTIVE", "PENDING", "INACTIVE")
-  - **currency**: Account currency (inferred from country or explicit)
+  - **currency**: Account currency
   - **bankName**: Name of the bank (for bank accounts)
   - **accountNumber**: Masked account number showing last 4 digits
   - **routingNumber**: Masked routing number showing last 4 digits
@@ -868,8 +871,6 @@ curl -X GET https://api.infinite.ai/v1/headless/customers/cust_abc123def456ghi78
   - **holderName**: Name of the account holder
   - **createdAt**: Account creation timestamp
   - **metadata**: Additional account information
-    - **bridgeAccountId**: External provider account ID
-    - **verificationStatus**: Account verification status
 - **totalCount**: Total number of accounts for this customer
 
 #### Important Notes
@@ -896,12 +897,12 @@ POST /v1/headless/quotes
 - **flow**: `string` (required) - Either "ONRAMP" or "OFFRAMP"
 - **source**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to convert
+  - `amount`: `number` (optional) - Amount to convert
   - `network`: `string` (optional) - Blockchain network for crypto assets
 - **target**: `object` (required)
   - `asset`: `string` - Asset code (e.g., "USD", "USDC", "BTC")
-  - `amount`: `decimal` (optional) - Amount to receive (if source amount not provided)
-  - `network`: `string` (optional) - Blockchain network for crypto assets
+  - `amount**: `number` (optional) - Amount to receive (if source amount not provided)
+  - `network**: `string` (optional) - Blockchain network for crypto assets
 
 > **Note:** You must provide either `source.amount` or `target.amount`, but not both.
 
@@ -937,7 +938,8 @@ POST /v1/headless/quotes
     "amount": 990.0
   },
   "infiniteFee": 5.0,
-  "edgeFee": 5.0
+  "partnerFee": 5.0,
+  "isEstimate": true
 }
 ```
 
@@ -973,7 +975,8 @@ POST /v1/headless/quotes
     "amount": 25253.75
   },
   "infiniteFee": 0.0,
-  "edgeFee": 0.0
+  "partnerFee": 0.0,
+  "isEstimate": true
 }
 ```
 
@@ -1010,7 +1013,8 @@ POST /v1/headless/quotes
     "amount": 0.42
   },
   "infiniteFee": 0.0,
-  "edgeFee": 0.0
+  "partnerFee": 0.0,
+  "isEstimate": true
 }
 ```
 
@@ -1037,12 +1041,12 @@ POST /v1/headless/quotes
 ### Fee Structure
 
 - **infiniteFee**: Fee charged by Infinite (1% of source amount)
-- **edgeFee**: Additional fee charged by Edge (0.5% of source amount)
+- **partnerFee**: Additional fee charged by partner (0.5% of source amount)
 - **Total Fee**: 1.5%
 
 > **Important Note on Fees:**
 >
-> - **Stablecoin (USDC/USDT)**: Both quotes and transfers show 1.5% fees (1% Infinite + 0.5% Edge)
+> - **Stablecoin (USDC/USDT)**: Both quotes and transfers show 1.5% fees (1% Infinite + 0.5% partner)
 > - **Non-stablecoin (BTC/ETH)**: Both quotes and transfers show 0% fees
 > - All transfers create fee ledger entries for tracking (with 0 amounts for BTC/ETH)
 
@@ -1065,24 +1069,32 @@ Create a new transfer for on-ramp (bank → crypto) or off-ramp (crypto → bank
 #### Request Body
 
 - **type**: `string` (required) - "ONRAMP" or "OFFRAMP"
-- **amount**: `number` (required) - Transfer amount
+- **amount**: `number` (required) - Transfer amount in display units (e.g., 100 for $100)
 - **source**: `object` (required)
-  - For on-ramp: `currency`, `network`, `accountId` (Infinite account ID)
-  - For off-ramp: `currency`, `network`, `fromAddress` (wallet address)
+  - For on-ramp: `currency` (fiat currency, e.g., "USD")
+  - For off-ramp: `currency`, `network`, `fromAddress` or `refundAddress`
 - **destination**: `object` (required)
-  - For on-ramp: `currency`, `network`, `toAddress` (wallet address)
-  - For off-ramp: `currency`, `network`, `accountId` (Infinite account ID)
+  - For on-ramp: `currency`, `toAddress` (wallet address)
+  - For off-ramp: `currency`, `accountId` (bank account ID)
 - **clientReferenceId**: `string` (optional) - Your reference ID
-- **developerFeePercent**: `string` (optional) - Developer fee percentage (0.0-100.0) - Only supported for stablecoin transfers (USDC/USDT)
+- **paymentReason**: `string` (optional) - Payment reason code
+
+> **Fees**: The headless API calculates fees automatically based on the currency pair:
+> - **Stablecoin transfers (USDC/USDT)**: 1.5% total (1% Infinite + 0.5% partner)
+> - **Non-stablecoin transfers (BTC/ETH)**: 0%
+>
+> `developerFeePercent` cannot be overridden in headless transfers.
 
 ```http
 POST /v1/headless/transfers
+Authorization: Bearer {jwt_token}
+X-Organization-ID: {organization_id}
 ```
 
 #### On-Ramp Transfer Example (Bank → Crypto)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-123" \
@@ -1091,19 +1103,17 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "type": "ONRAMP",
     "amount": 100.0,
     "source": {
-      "currency": "usd",
-      "network": "wire",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD"
     },
     "destination": {
-      "currency": "usdc",
-      "network": "ethereum",
+      "currency": "USDC",
       "toAddress": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
     },
-    "clientReferenceId": "my-onramp-001",
-    "developerFeePercent": "1.5"
+    "clientReferenceId": "my-onramp-001"
   }'
 ```
+
+> **Note:** For ONRAMP transfers, `source.accountId` is not required - the API provides deposit instructions (bank account details) where the customer should send fiat. The `source.network` defaults to "ach" for USD.
 
 #### On-Ramp Transfer Response
 
@@ -1131,17 +1141,25 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "network": "wire",
     "currency": "usd",
     "amount": 100.0,
-    "depositMessage": "Your reference code is 7fa4fb35-59d7-42c9-b0aa-66a4f5b34cf3. Please include this code in your wire transfer.",
+    "depositMessage": "BRGJFJHX3TCUWGFH3W6J",
     "bankAccountNumber": "8312008517",
     "bankRoutingNumber": "021000021",
     "bankBeneficiaryName": "Customer Bank Account",
     "bankName": "JPMorgan Chase Bank",
+    "bankAddress": {
+      "addressLine1": "383 Madison Avenue",
+      "city": "New York",
+      "state": "NY",
+      "postalCode": "10179",
+      "country": "US"
+    },
+    "bankAddressLine": null,
     "toAddress": null,
     "fromAddress": null
   },
   "fees": {
     "infiniteFee": 1.0,
-    "edgeFee": 0.5,
+    "partnerFee": 0.5,
     "total": 1.5,
     "currency": "USD"
   },
@@ -1150,10 +1168,10 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 }
 ```
 
-#### Off-Ramp Transfer Example with Developer Fee (USDC → Bank)
+#### Off-Ramp Transfer Example (USDC → Bank)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-456" \
@@ -1162,17 +1180,15 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "type": "OFFRAMP",
     "amount": 50.0,
     "source": {
-      "currency": "usdc",
+      "currency": "USDC",
       "network": "ethereum",
       "fromAddress": "0x7E40e22EF038FD3017F5D1F5974a73eD41e13064"
     },
     "destination": {
-      "currency": "usd",
-      "network": "ach",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD",
+      "accountId": "eba_abc123def456"
     },
-    "clientReferenceId": "my-offramp-001",
-    "developerFeePercent": "1.5"
+    "clientReferenceId": "my-offramp-001"
   }'
 ```
 
@@ -1212,7 +1228,7 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
   },
   "fees": {
     "infiniteFee": 0.5,
-    "edgeFee": 0.25,
+    "partnerFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
   },
@@ -1221,10 +1237,10 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
 }
 ```
 
-#### BTC Transfer Example (No Developer Fee)
+#### BTC Transfer Example (0% Fee)
 
 ```bash
-curl -X POST https://api.infinite.ai/v1/headless/transfers \
+curl -X POST https://api.infinite.dev/v1/headless/transfers \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}" \
   -H "Idempotency-Key: unique-transfer-key-789" \
@@ -1233,12 +1249,10 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
     "type": "ONRAMP",
     "amount": 100.0,
     "source": {
-      "currency": "usd",
-      "network": "wire",
-      "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03"
+      "currency": "USD"
     },
     "destination": {
-      "currency": "btc",
+      "currency": "BTC",
       "network": "bitcoin",
       "toAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
     },
@@ -1246,20 +1260,18 @@ curl -X POST https://api.infinite.ai/v1/headless/transfers \
   }'
 ```
 
-The response for BTC/ETH transfers will show 0 fees since Bridge doesn't support developer fees for these assets:
+The response for BTC/ETH transfers will show 0 fees (no fee for non-stablecoin transfers):
 
 ```json
 {
   "fees": {
     "infiniteFee": 0,
-    "edgeFee": 0,
+    "partnerFee": 0,
     "total": 0,
     "currency": "BTC"
   }
 }
 ```
-
-> **Note**: Developer fees are not supported for BTC/ETH transfers. The `developerFeePercent` field should be omitted for these transfers.
 
 ### Transfer Status Values
 
@@ -1280,27 +1292,173 @@ Transfers can have the following status values:
 3. **Deposit Instructions**:
    - For ONRAMP: Follow the wire transfer instructions in `sourceDepositInstructions`
    - For OFFRAMP: Send crypto to the address in `sourceDepositInstructions.toAddress`
-4. **Networks**: Specify the exact payment network (e.g., "wire", "ach", "ethereum")
-5. **Currencies**: Use lowercase currency codes (e.g., "usd", "usdc")
-6. **Developer Fees**:
-   - Only supported for stablecoin transfers (USDC/USDT)
-   - Not supported for BTC/ETH transfers
-   - Expressed as a percentage (e.g., "1.5" for 1.5%)
+4. **Networks**: Network values are case-insensitive. Supported networks:
+   - **Fiat (ONRAMP source / OFFRAMP destination)**: USD→ACH/WIRE, EUR→SEPA, MXN→SPEI
+   - **Crypto (ONRAMP destination / OFFRAMP source)**: USDC/USDT→ETHEREUM/POLYGON/SOLANA, BTC→BITCOIN, ETH→ETHEREUM
+5. **Currencies**: Currency codes (e.g., "usd", "usdc")
+6. **Fees** (automatic in headless API):
+   - 1.5% for stablecoin transfers (USDC/USDT)
+   - 0% for non-stablecoin transfers (BTC/ETH)
+   - Fees are calculated automatically - cannot be overridden
 7. **Fee Response Structure**:
-   - `infiniteFee`: 1.0% retained by Infinite
-   - `edgeFee`: 0.5% rebate to Edge
    - `total`: 1.5% total fee charged
    - `currency`: Currency of the fees
    - `fees` field shows 0 values for BTC/ETH transfers
-8. **Supported Transfer Routes**:
-   - **Production**: All advertised routes are supported
-   - **Sandbox Limitations**:
-     - **USD → USDC/USDT**: ✅ Fully supported
-     - **USDC/USDT → USD**: ✅ Fully supported
-     - **USD → ETH**: ✅ Supported
-     - **ETH → USD**: ✅ Supported
-     - **USD → BTC**: ⚠️ Intermittent 500 errors (Bridge sandbox issue)
-     - **BTC → USD**: ⚠️ May have limited support
+8. **Bank Address Fields** (for ONRAMP transfers):
+   - `bankAddress`: Structured object with `addressLine1`, `city`, `state`, `postalCode`, `country`
+   - `bankAddressLine`: Single-line string address (fallback when structured not available)
+   - Check both fields - the API returns whichever format the payment provider supplies
+
+---
+
+### Transfer Address Scenarios
+
+This section explains the different address handling modes for ONRAMP and OFFRAMP transfers.
+
+#### ONRAMP Transfers (Fiat → Crypto)
+
+For ONRAMP transfers, the source is fiat currency, so wallet address fields like `fromAddress` and `refundAddress` do not apply.
+
+| Field | Usage |
+|-------|-------|
+| `source.currency` | **Required** - Fiat currency (e.g., `USD`) |
+| `source.network` | Optional - Payment rail (defaults to `ach` for USD) |
+| `destination.toAddress` | **Required** - Wallet address where crypto will be sent |
+| `destination.currency` | **Required** - Crypto currency (e.g., `USDC`) |
+| `destination.network` | Optional - Blockchain network (defaults based on currency) |
+
+> **Note:** `source.accountId` is **not required** for ONRAMP - the API resolves the deposit destination automatically and returns bank details in `sourceDepositInstructions`.
+
+**Response**: Contains `sourceDepositInstructions` with bank details (account number, routing number, bank name, bank address) where the customer should deposit fiat.
+
+---
+
+#### OFFRAMP Transfers (Crypto → Fiat)
+
+OFFRAMP transfers support two modes based on whether the source wallet address is known in advance.
+
+##### Mode A: Standard OFFRAMP (with `fromAddress`)
+
+Use this mode when the customer knows which wallet address they'll send crypto from.
+
+```json
+{
+  "type": "OFFRAMP",
+  "amount": 100,
+  "source": {
+    "currency": "usdc",
+    "network": "base",
+    "fromAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+  },
+  "destination": {
+    "currency": "usd",
+    "network": "ach",
+    "accountId": "acct_bank_xyz123"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `fromAddress` | The wallet address the customer will send crypto from |
+
+**Behavior:**
+- Validates wallet ownership (must be registered to the customer)
+- Transfer expects funds specifically from this address
+- Best for EVM/account-based chains where the sender address is deterministic
+
+**Use Cases:**
+- Customer using their registered wallet
+- Mobile app with known wallet integration
+- Any scenario where the sending address is predetermined
+
+---
+
+##### Mode B: Any Address OFFRAMP (with `refundAddress`, without `fromAddress`)
+
+Use this mode when the sending address isn't known in advance. This is common for UTXO-based chains like Bitcoin where funds may come from any UTXO.
+
+```json
+{
+  "type": "OFFRAMP",
+  "amount": 100,
+  "source": {
+    "currency": "usdc",
+    "network": "base",
+    "refundAddress": "0x9876543210fedcba9876543210fedcba98765432"
+  },
+  "destination": {
+    "currency": "usd",
+    "network": "ach",
+    "accountId": "acct_bank_xyz123"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `refundAddress` | **Required** when `fromAddress` is omitted. Address where funds will be refunded if the transfer fails. |
+
+**Behavior:**
+- No wallet ownership validation (customer can send from any address)
+- Response includes a deposit address in `sourceDepositInstructions.toAddress`
+- Customer sends crypto TO this deposit address FROM any wallet
+- If transfer fails, funds are refunded to `refundAddress`
+
+**Response:**
+
+```json
+{
+  "sourceDepositInstructions": {
+    "network": "base",
+    "currency": "usdc",
+    "amount": 100,
+    "toAddress": "0x...",
+    "fromAddress": null
+  }
+}
+```
+
+**Use Cases:**
+- UTXO chains (Bitcoin) where sender address varies per transaction
+- Centralized exchanges where withdrawal address isn't controllable
+- Multi-sig wallets where the signing address may differ
+- When the customer wants flexibility in which wallet they send from
+
+---
+
+##### Invalid: Missing Both `fromAddress` and `refundAddress`
+
+OFFRAMP transfers **must** include either `fromAddress` or `refundAddress`.
+
+```json
+{
+  "type": "OFFRAMP",
+  "source": {
+    "currency": "usdc",
+    "network": "base"
+  }
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "statusCode": 400,
+  "message": "For OFFRAMP transfers without fromAddress, refundAddress is required. Please provide refundAddress in the source object for refunds if the transfer fails."
+}
+```
+
+---
+
+#### Address Decision Matrix
+
+| Scenario | `fromAddress` | `refundAddress` | Valid | Mode |
+|----------|---------------|-----------------|-------|------|
+| Known sender wallet | ✅ Provided | Optional | ✅ Yes | Standard |
+| Unknown sender (UTXO/Exchange) | Not provided | ✅ Required | ✅ Yes | Any Address |
+| Neither provided | Not provided | Not provided | ❌ No | Error |
 
 ---
 
@@ -1317,7 +1475,7 @@ X-Organization-ID: {organization_id}
 #### Example Request
 
 ```bash
-curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941f-2e7efb198edd \
+curl -X GET https://api.infinite.dev/v1/headless/transfers/e5954be9-c229-4fbc-941f-2e7efb198edd \
   -H "Authorization: Bearer {jwt_token}" \
   -H "X-Organization-ID: {organization_id}"
 ```
@@ -1330,36 +1488,36 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
   "type": "ONRAMP",
   "status": "PROCESSING",
   "stage": "payment_received",
-  "amount": "100.00",
+  "amount": 100,
   "currency": "USD",
   "source": {
     "type": "bank_account",
-    "accountId": "da4d1f78-7cdb-47a9-b577-8b4623901f03",
-    "address": null,
-    "currency": "usd",
-    "network": "wire"
+    "accountId": null,
+    "currency": "USD"
   },
   "destination": {
     "type": "wallet",
-    "accountId": null,
-    "address": "0xd8da6bf26964af9d7eed9e03e53415d37aa96045",
-    "currency": "usdc",
-    "network": "ethereum"
+    "accountId": "ewa_g4zdtec5biocpb2h9i7j",
+    "currency": "USDC"
+  },
+  "sourceDepositInstructions": {
+    "network": "ach_push",
+    "currency": "USD",
+    "amount": 100,
+    "bankAccountNumber": "11223344556677",
+    "bankRoutingNumber": "123456789",
+    "bankBeneficiaryName": "Bridge Ventures Inc",
+    "bankName": "Bank of Nowhere",
+    "bankAddressLine": "1800 North Pole St., Orlando, FL 32801"
   },
   "fees": {
     "infiniteFee": 1.0,
-    "edgeFee": 0.5,
+    "partnerFee": 0.5,
     "total": 1.5,
     "currency": "USD"
   },
-  "expectedCompletionTime": null,
-  "transactionHash": null,
   "createdAt": "2025-01-09T23:18:45.123Z",
-  "updatedAt": "2025-01-09T23:25:10.456Z",
-  "metadata": {
-    "bridgeTransferId": "br_transfer_1234567890",
-    "clientReferenceId": "my-onramp-001"
-  }
+  "updatedAt": "2025-01-09T23:25:10.456Z"
 }
 ```
 
@@ -1389,7 +1547,7 @@ curl -X GET https://api.infinite.ai/v1/headless/transfers/e5954be9-c229-4fbc-941
   },
   "fees": {
     "infiniteFee": 0.5,
-    "edgeFee": 0.25,
+    "partnerFee": 0.25,
     "total": 0.75,
     "currency": "USDC"
   },
@@ -1461,6 +1619,79 @@ The `stage` field contains the detailed state from the payment provider. Common 
 | `refunded`          | Transfer was refunded                                                                                      |
 
 > **Note**: The exact stage values depend on the payment provider and transfer type. The `status` field provides a simplified view mapped from these detailed stages.
+
+#### Sandbox Transfer Progression using Bridge emulator
+
+In sandbox environments, transfer status automatically progresses based on time. The API returns our uppercase enum values, while the Bridge emulator uses lowercase status values in the background.
+
+##### ONRAMP (Fiat → Crypto)
+
+*You're depositing USD to receive USDC*
+
+| Time Since Created | API Response | Bridge Emulated | What's Happening |
+|--------------------|--------------|-----------------|------------------|
+| 0-30 seconds | `AWAITING_FUNDS` | `awaiting_funds` | Waiting for your bank deposit |
+| 30 sec - 2 min | `PROCESSING` | `payment_submitted` | Bank transfer detected |
+| 2-5 minutes | `PROCESSING` | `payment_processed` | Funds cleared, converting to crypto |
+| 5+ minutes | `COMPLETED` | `completed` | USDC sent to your wallet |
+
+##### OFFRAMP (Crypto → Fiat)
+
+*You're sending USDC to receive USD in your bank*
+
+| Time Since Created | API Response | Bridge Emulated | What's Happening |
+|--------------------|--------------|-----------------|------------------|
+| 0-30 seconds | `AWAITING_FUNDS` | `awaiting_crypto` | Waiting for your crypto deposit |
+| 30 sec - 2 min | `PROCESSING` | `funds_received` | Crypto deposit confirmed |
+| 2-5 minutes | `PROCESSING` | `payment_submitted` | Converting and initiating bank transfer |
+| 5-10 minutes | `PROCESSING` | `payment_processed` | Bank transfer in progress |
+| 10+ minutes | `COMPLETED` | `completed` | USD deposited to your bank |
+
+##### Sandbox Deposit Instructions
+
+When you create an **ONRAMP** transfer, you'll receive bank details to deposit funds:
+
+```json
+{
+  "sourceDepositInstructions": {
+    "bankName": "Bank of Nowhere",
+    "bankAccountNumber": "11223344556677",
+    "bankRoutingNumber": "123456789",
+    "bankBeneficiaryName": "Bridge Ventures Inc",
+    "bankAddress": null,
+    "bankAddressLine": "1800 North Pole St., Orlando, FL 32801",
+    "currency": "USD",
+    "network": "ach_push"
+  }
+}
+```
+
+> **Note on Bank Address Fields:**
+> - `bankAddress`: Structured address object with `addressLine1`, `city`, `state`, `postalCode`, `country` (when available)
+> - `bankAddressLine`: Single-line address string (when structured address is not available)
+>
+> The API returns whichever format is available from the payment provider. In sandbox (using Bridge emulator), you'll typically receive `bankAddressLine` as a single string. Check both fields when displaying bank address to users.
+```
+
+When you create an **OFFRAMP** transfer, you'll receive a crypto address to send funds:
+
+```json
+{
+  "sourceDepositInstructions": {
+    "toAddress": "0x...",
+    "currency": "USDC",
+    "network": "ethereum"
+  }
+}
+```
+
+##### Quick Test Flow
+
+1. **Authenticate** → Get JWT token
+2. **Check KYC** → Wait 5 min OR use `X-Sandbox-KYC-Status: ACTIVE`
+3. **Create bank account** → Link your external bank
+4. **Create ONRAMP transfer** → Get deposit instructions
+5. **Poll transfer status** → Watch it progress to `completed`
 
 ---
 
@@ -1569,25 +1800,21 @@ Store your credentials securely in environment variables:
 
 ```env
 # .env file
-INFINITE_API_URL=https://api.infinite.ai
+INFINITE_API_URL=https://api.infinite.dev
 INFINITE_ORG_ID=your_organization_id
 ```
 
 ### 2. Authentication Flow
 
-1. **Request Challenge**: Call `/auth/wallet/challenge` with the user's wallet public key
+1. **Request Challenge**: Call `/v1/headless/auth/wallet/challenge` with the user's wallet public key
 2. **Sign Message**: Have the user sign the formatted message with their wallet
-3. **Verify Signature**: Submit the signature to `/auth/wallet/verify`
+3. **Verify Signature**: Submit the signature to `/v1/headless/auth/wallet/verify`
 4. **Store Token**: Save the JWT token securely using platform-specific storage
-   - Use httpOnly, secure cookies for maximum security
-   - Alternative: Encrypted localStorage with short expiration
+   - **Web**: Use httpOnly, secure cookies for maximum security
+   - **Mobile**: Use OS-specific credential storage (Keychain, Credential Manager, Secret Service)
+   - **Desktop**: Use OS-specific credential storage
 
-**Mobile Applications:**  
-**Desktop Applications:**
-
-- Use OS-specific credential storage (Keychain, Credential Manager, Secret Service)
-
-### 4. Making Authenticated Requests
+### 3. Making Authenticated Requests
 
 Include the JWT token in all authenticated API calls:
 
@@ -1618,7 +1845,7 @@ X-Organization-ID: your_organization_id
 
 ### Session Security
 
-- Review active sessions periodically via `/auth/wallet/sessions`
+- Review active sessions periodically via `/v1/headless/auth/wallet/sessions`
 - Logout unused sessions to prevent unauthorized access
 - Implement session timeout handling in your application
 - Store session IDs securely for session management
